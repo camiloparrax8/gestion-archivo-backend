@@ -1,0 +1,4 @@
+storage/
+.env
+.env.*
+!.env.example
