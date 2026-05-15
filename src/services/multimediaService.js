@@ -53,12 +53,14 @@ function validarIdentificadorEntidad(entidad, id) {
   if (!valor) {
     throw new AppError('El identificador es obligatorio', 400);
   }
-  if (entidad === 'usuarios' || entidad === 'sellers') {
+  if (entidad === 'usuarios' || entidad === 'sellers' || entidad === 'productos') {
     if (!UUID_RE.test(valor)) {
       const msg =
         entidad === 'usuarios'
           ? 'Para usuarios, el identificador debe ser un UUID (publicId)'
-          : 'Para sellers, el identificador debe ser un UUID';
+          : entidad === 'sellers'
+            ? 'Para sellers, el identificador debe ser un UUID'
+            : 'Para productos, el identificador debe ser un UUID';
       throw new AppError(msg, 400);
     }
     return;

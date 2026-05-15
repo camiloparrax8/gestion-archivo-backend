@@ -189,6 +189,8 @@ async function accesoLocalPorToken(req, res, next) {
     const clienteOid = mongoose.Types.ObjectId.isValid(payload.cid)
       ? new mongoose.Types.ObjectId(payload.cid)
       : undefined;
+    // Helmet envía CORP same-origin por defecto; el admin (otro origen/puerto) no puede usar <img src=".../acceso/...">.
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.sendFile(path.resolve(abs), (err) => {
       if (err) return next(err);
       void auditoriaService.registrar({
