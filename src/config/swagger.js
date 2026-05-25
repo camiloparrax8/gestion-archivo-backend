@@ -6,10 +6,10 @@ const options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'Orion Marketplace File Management API',
+      title: 'Guven File API',
       version: '1.0.0',
-      description: 'API de gestión de archivos/multimedia, clientes y llaves API.',
-      contact: { name: 'Equipo Orion' },
+      description: 'API de gestión de archivos para desarrolladores. Sube, lista y elimina archivos mediante API Keys.',
+      contact: { name: 'Guven File' },
     },
     servers: [{ url: '/api', description: 'Servidor principal' }],
     tags: [

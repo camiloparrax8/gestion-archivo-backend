@@ -66,8 +66,8 @@ const router = express.Router();
  *       401:
  *         description: Token inválido o expirado
  */
-// Bootstrap de usuarios: solo con master key para evitar registro público abierto.
 router.post('/register', requerirMasterKey, express.json(), asyncHandler(authController.register));
+router.post('/register-client', express.json(), asyncHandler(authController.registerClient));
 router.post('/login', express.json(), asyncHandler(authController.login));
 router.get('/me', autenticarJwt, asyncHandler(authController.me));
 

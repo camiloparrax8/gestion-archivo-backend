@@ -63,7 +63,7 @@ async function login({ email, password }) {
     throw new AppError('Credenciales inválidas', 401);
   }
   if (!doc.activo) {
-    throw new AppError('Usuario inactivo', 403);
+    throw new AppError('Tu cuenta aún no ha sido activada. Contacta al administrador.', 403);
   }
   const ok = await bcrypt.compare(String(password || ''), doc.passwordHash);
   if (!ok) {
@@ -88,4 +88,28 @@ async function getMe(clienteId) {
   return sanitizeCliente(doc);
 }
 
-module.exports = { register, login, getMe };
+async function registerClient({ email, nombre, password, telefono, tipoDocumento, numeroDocumento }) {
+  const rawPassword = String(password || '');
+  if (rawPassword.length < 8) {
+    throw new AppError('La contraseña debe tener al menos 8 caracteres', 400);
+  }
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const exists = await Cliente.findOne({ email: normalizedEmail });
+  if (exists) {
+    throw new AppError('Ya existe un usuario con ese email', 409);
+  }
+  const passwordHash = await bcrypt.hash(rawPassword, 12);
+  const doc = await Cliente.create({
+    email: normalizedEmail,
+    nombre: String(nombre || '').trim(),
+    telefono: String(telefono || '').trim() || undefined,
+    tipoDocumento: String(tipoDocumento || '').trim() || undefined,
+    numeroDocumento: String(numeroDocumento || '').trim() || undefined,
+    passwordHash,
+    rol: 'cliente',
+    activo: false,
+  });
+  return sanitizeCliente(doc);
+}
+
+module.exports = { register, registerClient, login, getMe };
