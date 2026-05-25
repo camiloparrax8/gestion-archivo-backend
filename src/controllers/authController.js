@@ -24,4 +24,16 @@ async function me(req, res) {
   res.json({ data });
 }
 
-module.exports = { register, login, me };
+async function registerClient(req, res) {
+  const { email, nombre, password, telefono, tipoDocumento, numeroDocumento } = req.body || {};
+  if (!email || !nombre || !password) {
+    throw new AppError('email, nombre y password son obligatorios', 400);
+  }
+  const data = await authService.registerClient({ email, nombre, password, telefono, tipoDocumento, numeroDocumento });
+  res.status(201).json({
+    message: 'Registro exitoso. Tu cuenta será activada por un administrador.',
+    data,
+  });
+}
+
+module.exports = { register, registerClient, login, me };
