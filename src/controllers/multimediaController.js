@@ -8,7 +8,6 @@ const AppError = require('../utils/AppError');
 const config = require('../config');
 const { nombreCampoArchivo } = require('../middleware/multerMultimedia');
 const { SUBCARPETAS_TIPO_ARCHIVO } = require('../config/multimedia');
-const { alcanzaPrefijos } = require('../middleware/validarAlcanceMultimedia');
 
 function clienteIdParaRutas(req) {
   if (!config.mongodbUri || req.auth?.legacy || !req.auth?.cliente?._id) {
@@ -140,19 +139,6 @@ async function solicitarUrlFirma(req, res) {
   }
 
   const parsed = parsearRutaInternaCliente(ruta);
-  const prefs = req.auth.apiKeyDoc?.prefijos || [];
-  const carpeta = String(parsed.carpeta || '').toLowerCase();
-  if (
-    !req.auth?.panelJwt &&
-    req.auth.apiKeyDoc &&
-    prefs.length > 0 &&
-    !alcanzaPrefijos(carpeta, prefs)
-  ) {
-    throw new AppError(
-      `La ruta está fuera del alcance de esta API key. Prefijos permitidos: ${prefs.join(', ')}.`,
-      403,
-    );
-  }
 
   const clienteId = String(req.auth.cliente._id);
   const existe = await multimediaService.existeArchivoEnAlmacenamiento(clienteId, ruta);

@@ -57,24 +57,11 @@ function validarAlcanceMultimedia(req, res, next) {
   if (!config.mongodbUri || req.auth?.legacy || !req.auth?.apiKeyDoc) {
     return next();
   }
-  /** Panel JWT: la llave es filtro opcional; la subida crea carpetas bajo el tenant. */
-  if (req.auth?.panelJwt) {
-    return next();
-  }
-  const prefs = req.auth.apiKeyDoc.prefijos || [];
-  const esEscritura = req.method === 'POST' || req.method === 'DELETE';
-  const ok = esEscritura
-    ? alcanzaPrefijosEscritura(req.params, prefs)
-    : alcanzaPrefijos(rutasAlcanceDesdeParams(req.params).completa, prefs);
-  if (!ok) {
-    const hint =
-      prefs.length > 0
-        ? ` Prefijos permitidos: ${prefs.join(', ')}.`
-        : '';
-    return next(
-      new AppError(`La ruta está fuera del alcance de esta API key.${hint}`, 403),
-    );
-  }
+  /**
+   * La API key identifica al tenant (cliente en MongoDB).
+   * contexto/entidad/id/tipo son libres: si la carpeta no existe, se crea al subir.
+   * Los prefijos de la llave solo filtran el explorador (browse), no bloquean rutas aquí.
+   */
   return next();
 }
 
