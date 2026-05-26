@@ -8,7 +8,8 @@ const options = {
     info: {
       title: 'Guven File API',
       version: '1.0.0',
-      description: 'API de gestión de archivos para desarrolladores. Sube, lista y elimina archivos mediante API Keys.',
+      description:
+        'API de gestión de archivos: integraciones con API Key (X-API-Key) y panel web con JWT (Bearer). Misma estructura de rutas lógicas contexto/entidad/id/tipo.',
       contact: { name: 'Guven File' },
     },
     servers: [{ url: '/api', description: 'Servidor principal' }],
@@ -18,7 +19,8 @@ const options = {
       { name: 'Auth', description: 'Autenticación de usuarios (JWT)' },
       { name: 'Admin', description: 'Administración (solo admin)' },
       { name: 'Client', description: 'Autoservicio del cliente (rol cliente)' },
-      { name: 'Multimedia', description: 'Gestión de multimedia' },
+      { name: 'Multimedia', description: 'Multimedia con API Key (integraciones)' },
+      { name: 'MultimediaPanel', description: 'Multimedia con JWT (panel web, sin API key obligatoria)' },
       { name: 'Products', description: 'Productos (stub)' },
     ],
     components: {
@@ -81,6 +83,174 @@ const options = {
             data: { $ref: '#/components/schemas/ClienteAdmin' },
           },
         },
+        MultimediaUrlFirmaRequest: {
+          type: 'object',
+          required: ['rutaInternaCliente'],
+          properties: {
+            rutaInternaCliente: {
+              type: 'string',
+              description:
+                'Ruta lógica del archivo (5 o 6 segmentos). Ej. orion/productos/42/galeria/jpeg/foto.jpg. No incluye clients/{mongoId}/.',
+              example: 'orion/productos/674a1b2c3d4e5f678901234/galeria/jpeg/1678900000-abc.jpg',
+            },
+            segundos: {
+              type: 'integer',
+              description: 'TTL del enlace (máx. SIGNED_URL_EXPIRES_SECONDS)',
+              example: 900,
+            },
+          },
+        },
+        MultimediaUrlFirmaResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: {
+                url: { type: 'string', format: 'uri' },
+                expiraEnSegundos: { type: 'integer' },
+              },
+            },
+          },
+        },
+        MultimediaArchivoItem: {
+          type: 'object',
+          properties: {
+            nombre: { type: 'string' },
+            nombreOriginal: { type: 'string' },
+            rutaRelativa: {
+              type: 'string',
+              description: 'Ruta física bajo storage/ o S3 (incluye clients/{id}/…)',
+            },
+            rutaInternaCliente: {
+              type: 'string',
+              description: 'Ruta lógica estable para url-firma y metadatos',
+            },
+            subcarpeta: { type: 'string', enum: ['pdf', 'jpeg', 'png', 'gif', 'webp'] },
+            mime: { type: 'string' },
+            tamaño: { type: 'integer' },
+            modificadoEn: { type: 'string', format: 'date-time' },
+            visibilidad: { type: 'string', enum: ['publico', 'privado'] },
+            url: { type: 'string', format: 'uri', nullable: true },
+            accesoPrivado: { type: 'boolean' },
+          },
+        },
+        MultimediaUploadResponse: {
+          type: 'object',
+          properties: {
+            data: { $ref: '#/components/schemas/MultimediaArchivoItem' },
+          },
+        },
+        MultimediaListResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/MultimediaArchivoItem' },
+            },
+          },
+        },
+        MultimediaExplorerItem: {
+          type: 'object',
+          properties: {
+            kind: { type: 'string', enum: ['folder', 'file'] },
+            name: { type: 'string' },
+            path: { type: 'string' },
+            folder: { type: 'string' },
+            rutaInternaCliente: { type: 'string' },
+            rutaRelativa: { type: 'string' },
+            contexto: { type: 'string' },
+            permissions: { type: 'string' },
+            url: { type: 'string', format: 'uri', nullable: true },
+            nombreOriginal: { type: 'string' },
+            mime: { type: 'string' },
+            subcarpeta: { type: 'string' },
+            tamaño: { type: 'integer' },
+            modificadoEn: { type: 'string', format: 'date-time' },
+            visibilidad: { type: 'string', enum: ['publico', 'privado'] },
+            accesoPrivado: { type: 'boolean' },
+          },
+        },
+        MultimediaBrowseResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: {
+                prefix: { type: 'string' },
+                contexto: { type: 'string', nullable: true },
+                items: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/MultimediaExplorerItem' },
+                },
+                llave: {
+                  type: 'object',
+                  nullable: true,
+                  description: 'Presente solo si se envió X-Llave-Id',
+                },
+              },
+            },
+          },
+        },
+      },
+      parameters: {
+        MultimediaContexto: {
+          in: 'path',
+          name: 'contexto',
+          required: true,
+          schema: { type: 'string' },
+          description: 'Slug de aplicación (ej. orion, guven). No es el id del cliente en MongoDB.',
+        },
+        MultimediaEntidad: {
+          in: 'path',
+          name: 'entidad',
+          required: true,
+          schema: { type: 'string' },
+          description: 'Segmento de negocio (productos, usuarios, sellers, …).',
+        },
+        MultimediaResourceId: {
+          in: 'path',
+          name: 'id',
+          required: true,
+          schema: { type: 'string' },
+          description:
+            'ID del recurso en el sistema integrador (productId, sellerId, userId). No es el clienteId de gestión de archivos (ese lo resuelve la API key).',
+        },
+        MultimediaTipo: {
+          in: 'path',
+          name: 'tipo',
+          required: true,
+          schema: {
+            type: 'string',
+            enum: ['perfil', 'logo', 'galeria', 'documentos', 'marca', 'otros'],
+          },
+        },
+        MultimediaArchivoNombre: {
+          in: 'path',
+          name: 'archivo',
+          required: true,
+          schema: { type: 'string' },
+          description: 'Nombre de archivo devuelto al subir o listar',
+        },
+        MultimediaBrowsePrefix: {
+          in: 'query',
+          name: 'prefix',
+          schema: { type: 'string' },
+          description: 'Prefijo lógico de carpeta (ej. orion/productos)',
+        },
+        LlaveIdOpcional: {
+          in: 'header',
+          name: 'X-Llave-Id',
+          schema: { type: 'string' },
+          description:
+            'Opcional en panel JWT: publicId de una API key para filtrar browse y aplicar prefijos. No obligatorio para subir.',
+        },
+        AdminClienteId: {
+          in: 'path',
+          name: 'clienteId',
+          required: true,
+          schema: { type: 'string' },
+          description: 'publicId (UUID) u ObjectId del cliente',
+        },
       },
     },
   },
@@ -88,6 +258,7 @@ const options = {
     path.join(__dirname, '../app.js'),
     path.join(__dirname, '../routes/**/*.js'),
     path.join(__dirname, '../controllers/**/*.js'),
+    path.join(__dirname, '../docs/openapi-multimedia-panel.js'),
   ],
 };
 

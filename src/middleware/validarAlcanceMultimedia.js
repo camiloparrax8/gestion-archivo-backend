@@ -9,8 +9,22 @@ function alcanzaPrefijos(rutaLogica, prefijos) {
   return prefs.some((p) => rutaLogica === p || rutaLogica.startsWith(`${p}/`));
 }
 
+function itemVisibleEnPrefijos(itemPath, prefijos) {
+  const prefs = prefijos || [];
+  if (!prefs.length) {
+    return true;
+  }
+  const path = String(itemPath || '').replace(/^\/+|\/+$/g, '');
+  return prefs.some((p) => {
+    if (!path) {
+      return true;
+    }
+    return path === p || path.startsWith(`${p}/`) || p.startsWith(`${path}/`);
+  });
+}
+
 function validarAlcanceMultimedia(req, res, next) {
-  if (!config.mongodbUri || req.auth?.legacy) {
+  if (!config.mongodbUri || req.auth?.legacy || !req.auth?.apiKeyDoc) {
     return next();
   }
   const { contexto, entidad, id, tipo } = req.params;
@@ -22,9 +36,21 @@ function validarAlcanceMultimedia(req, res, next) {
   return next();
 }
 
+function validarAlcanceBrowse(req, res, next) {
+  if (!config.mongodbUri || req.auth?.legacy || !req.auth?.apiKeyDoc) {
+    return next();
+  }
+  const prefix = String(req.query.prefix || '').replace(/^\/+|\/+$/g, '');
+  const prefs = req.auth.apiKeyDoc.prefijos || [];
+  if (!itemVisibleEnPrefijos(prefix, prefs)) {
+    return next(new AppError('Prefijo fuera del alcance de la llave', 403));
+  }
+  return next();
+}
+
 function validarAlcanceRutaCliente(rutaRelativaCliente) {
   return (req, res, next) => {
-    if (!config.mongodbUri || req.auth?.legacy) {
+    if (!config.mongodbUri || req.auth?.legacy || !req.auth?.apiKeyDoc) {
       return next();
     }
     const prefs = req.auth.apiKeyDoc.prefijos || [];
@@ -35,4 +61,10 @@ function validarAlcanceRutaCliente(rutaRelativaCliente) {
   };
 }
 
-module.exports = { validarAlcanceMultimedia, alcanzaPrefijos, validarAlcanceRutaCliente };
+module.exports = {
+  validarAlcanceMultimedia,
+  validarAlcanceBrowse,
+  alcanzaPrefijos,
+  itemVisibleEnPrefijos,
+  validarAlcanceRutaCliente,
+};

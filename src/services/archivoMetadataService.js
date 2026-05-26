@@ -52,10 +52,18 @@ async function mapaMetadata(clienteId, rutasCliente) {
     cliente: clienteId,
     rutaRelativa: { $in: rutasCliente },
   })
-    .select('rutaRelativa visibilidad nombreOriginal')
+    .select('rutaRelativa visibilidad nombreOriginal mime tamaño')
     .lean();
   return new Map(
-    docs.map((d) => [d.rutaRelativa, { visibilidad: d.visibilidad, nombreOriginal: d.nombreOriginal }]),
+    docs.map((d) => [
+      d.rutaRelativa,
+      {
+        visibilidad: d.visibilidad,
+        nombreOriginal: d.nombreOriginal,
+        mime: d.mime,
+        tamaño: d.tamaño,
+      },
+    ]),
   );
 }
 

@@ -7,6 +7,7 @@ const {
   HeadObjectCommand,
 } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const path = require('path');
 const config = require('../config');
 
 let client;
@@ -91,6 +92,50 @@ async function listarPorPrefijo(prefijo) {
   return acumulado;
 }
 
+/** Lista un nivel de “carpeta” en S3 (subcarpetas + archivos inmediatos). */
+async function listarNivel(prefijoLogicoRelativo) {
+  const base = normalizarPrefijo(claveCompleta(String(prefijoLogicoRelativo || '').replace(/^\/+/, '')));
+  const folders = [];
+  const files = [];
+  let continuationToken;
+
+  do {
+    const cmd = new ListObjectsV2Command({
+      Bucket: config.s3.bucket,
+      Prefix: base,
+      Delimiter: '/',
+      ContinuationToken: continuationToken,
+    });
+    const out = await getClient().send(cmd);
+
+    for (const cp of out.CommonPrefixes || []) {
+      const key = cp.Prefix || '';
+      const rel = key.startsWith(base) ? key.slice(base.length) : key;
+      const name = rel.replace(/\/$/, '');
+      if (name) {
+        folders.push({ name });
+      }
+    }
+
+    for (const obj of out.Contents || []) {
+      const key = obj.Key || '';
+      if (key === base || key.endsWith('/')) continue;
+      const rel = key.startsWith(base) ? key.slice(base.length) : path.basename(key);
+      if (!rel || rel.includes('/')) continue;
+      files.push({
+        name: rel,
+        key,
+        tamaño: obj.Size,
+        modificadoEn: obj.LastModified ? obj.LastModified.toISOString() : null,
+      });
+    }
+
+    continuationToken = out.IsTruncated ? out.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return { folders, files };
+}
+
 async function eliminarObjeto(clave) {
   const cmd = new DeleteObjectCommand({
     Bucket: config.s3.bucket,
@@ -134,6 +179,7 @@ module.exports = {
   urlFirmaLectura,
   subirObjeto,
   listarPorPrefijo,
+  listarNivel,
   eliminarObjeto,
   existeObjeto,
   normalizarPrefijo,

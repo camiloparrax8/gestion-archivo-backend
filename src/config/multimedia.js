@@ -1,7 +1,7 @@
 /**
- * Dominios de almacenamiento (segmento de ruta bajo la raíz `storage/` en disco).
+ * Segmentos de ruta libres (contexto, entidad): minúsculas, empiezan con letra.
  */
-const ENTIDADES_PERMITIDAS = new Set(['usuarios', 'productos', 'pedidos', 'sellers']);
+const SEGMENTO_SLUG_RE = /^[a-z][a-z0-9_-]{0,62}$/;
 
 /**
  * Subcarpetas por tipo de contenido (perfil, galería, logo, etc.).
@@ -63,11 +63,11 @@ function subcarpetaPorMime(mimetype) {
 const CAMPO_ARCHIVO = 'archivo';
 
 module.exports = {
-  ENTIDADES_PERMITIDAS,
   TIPOS_CARPETA_PERMITIDOS,
   MIME_PERMITIDOS,
   MIME_A_SUBCARPETA,
   SUBCARPETAS_TIPO_ARCHIVO,
   subcarpetaPorMime,
   CAMPO_ARCHIVO,
+  SEGMENTO_SLUG_RE,
 };
