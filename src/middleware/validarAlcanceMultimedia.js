@@ -1,6 +1,23 @@
 const config = require('../config');
 const AppError = require('../utils/AppError');
 
+function normalizarSegmentoSlug(valor) {
+  return String(valor || '').trim().toLowerCase();
+}
+
+/** Rutas lógicas 4 segmentos (params de URL multimedia). */
+function rutasAlcanceDesdeParams(params) {
+  const contexto = normalizarSegmentoSlug(params.contexto);
+  const entidad = normalizarSegmentoSlug(params.entidad);
+  const id = String(params.id || '').trim();
+  const tipo = normalizarSegmentoSlug(params.tipo);
+  return {
+    completa: `${contexto}/${entidad}/${id}/${tipo}`,
+    anchor: `${contexto}/${entidad}`,
+    contexto,
+  };
+}
+
 function alcanzaPrefijos(rutaLogica, prefijos) {
   const prefs = prefijos || [];
   if (!prefs.length) {
@@ -8,12 +25,18 @@ function alcanzaPrefijos(rutaLogica, prefijos) {
   }
   const ruta = String(rutaLogica || '').replace(/^\/+|\/+$/g, '');
   return prefs.some((p) => {
-    const pref = String(p || '').replace(/^\/+|\/+$/g, '');
+    const pref = String(p || '').replace(/^\/+|\/+$/g, '').toLowerCase();
     if (!pref) {
       return true;
     }
     return ruta === pref || ruta.startsWith(`${pref}/`) || pref.startsWith(`${ruta}/`);
   });
+}
+
+/** Subida/borrado: la carpeta puede no existir aún; basta alcance por prefijo de llave. */
+function alcanzaPrefijosEscritura(params, prefijos) {
+  const { completa, anchor } = rutasAlcanceDesdeParams(params);
+  return alcanzaPrefijos(completa, prefijos) || alcanzaPrefijos(anchor, prefijos);
 }
 
 function itemVisibleEnPrefijos(itemPath, prefijos) {
@@ -38,11 +61,19 @@ function validarAlcanceMultimedia(req, res, next) {
   if (req.auth?.panelJwt) {
     return next();
   }
-  const { contexto, entidad, id, tipo } = req.params;
-  const rutaLogica = `${contexto}/${entidad}/${id}/${tipo}`;
   const prefs = req.auth.apiKeyDoc.prefijos || [];
-  if (!alcanzaPrefijos(rutaLogica, prefs)) {
-    return next(new AppError('La ruta está fuera del alcance de esta API key', 403));
+  const esEscritura = req.method === 'POST' || req.method === 'DELETE';
+  const ok = esEscritura
+    ? alcanzaPrefijosEscritura(req.params, prefs)
+    : alcanzaPrefijos(rutasAlcanceDesdeParams(req.params).completa, prefs);
+  if (!ok) {
+    const hint =
+      prefs.length > 0
+        ? ` Prefijos permitidos: ${prefs.join(', ')}.`
+        : '';
+    return next(
+      new AppError(`La ruta está fuera del alcance de esta API key.${hint}`, 403),
+    );
   }
   return next();
 }
@@ -79,6 +110,8 @@ module.exports = {
   validarAlcanceMultimedia,
   validarAlcanceBrowse,
   alcanzaPrefijos,
+  alcanzaPrefijosEscritura,
+  rutasAlcanceDesdeParams,
   itemVisibleEnPrefijos,
   validarAlcanceRutaCliente,
 };

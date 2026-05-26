@@ -141,13 +141,17 @@ async function solicitarUrlFirma(req, res) {
 
   const parsed = parsearRutaInternaCliente(ruta);
   const prefs = req.auth.apiKeyDoc?.prefijos || [];
+  const carpeta = String(parsed.carpeta || '').toLowerCase();
   if (
     !req.auth?.panelJwt &&
     req.auth.apiKeyDoc &&
     prefs.length > 0 &&
-    !alcanzaPrefijos(parsed.carpeta, prefs)
+    !alcanzaPrefijos(carpeta, prefs)
   ) {
-    throw new AppError('La ruta está fuera del alcance de esta API key', 403);
+    throw new AppError(
+      `La ruta está fuera del alcance de esta API key. Prefijos permitidos: ${prefs.join(', ')}.`,
+      403,
+    );
   }
 
   const clienteId = String(req.auth.cliente._id);
