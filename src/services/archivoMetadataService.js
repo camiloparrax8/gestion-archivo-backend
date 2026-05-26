@@ -76,26 +76,76 @@ function normalizarPrefijoLogico(prefijoLogico) {
   return String(prefijoLogico || '').replace(/^\/+|\/+$/g, '');
 }
 
+function alcanzaPrefijosRuta(rutaLogica, prefijos) {
+  const prefs = (prefijos || [])
+    .map((p) => String(p || '').replace(/^\/+|\/+$/g, '').toLowerCase())
+    .filter(Boolean);
+  if (!prefs.length) {
+    return false;
+  }
+  const ruta = String(rutaLogica || '').replace(/^\/+|\/+$/g, '').toLowerCase();
+  return prefs.some(
+    (pref) => ruta === pref || ruta.startsWith(`${pref}/`) || pref.startsWith(`${ruta}/`),
+  );
+}
+
+/** Archivo pertenece a la llave: subida con esa apiKey o legado sin apiKey bajo sus prefijos. */
+function perteneceALlave(doc, apiKeyId, prefijosLlave) {
+  if (doc.apiKey) {
+    return String(doc.apiKey) === String(apiKeyId);
+  }
+  return alcanzaPrefijosRuta(doc.rutaRelativa, prefijosLlave);
+}
+
+/** Todas las rutas del cliente visibles para una llave (apiKey + legado por prefijos). */
+async function rutasRelativasParaLlave(clienteId, apiKeyId, prefijosLlave = []) {
+  const docs = await Archivo.find({ cliente: clienteId })
+    .select('rutaRelativa apiKey')
+    .lean();
+  return docs
+    .filter((doc) => perteneceALlave(doc, apiKeyId, prefijosLlave))
+    .map((doc) => normalizarPrefijoLogico(doc.rutaRelativa))
+    .filter(Boolean);
+}
+
 /**
  * Hijos inmediatos (carpetas y archivos) inferidos de metadatos MongoDB.
  * Cubre rutas 5 o 6 segmentos (…/tipo/archivo o …/tipo/pdf/archivo).
  */
 async function listarHijosDesdeMetadata(clienteId, prefijoLogico, opciones = {}) {
   const limpio = normalizarPrefijoLogico(prefijoLogico);
-  const filtro = { cliente: clienteId };
-  if (limpio) {
-    filtro.rutaRelativa = new RegExp(`^${limpio.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`);
-  }
   const apiKeyId = opciones.apiKeyId;
-  if (apiKeyId) {
-    filtro.apiKey = apiKeyId;
-  }
+  const prefijosLlave = opciones.prefijosLlave || [];
 
-  const docs = await Archivo.find(filtro)
-    .select(
-      'rutaRelativa nombre nombreOriginal mime tamaño visibilidad apiKey updatedAt createdAt',
-    )
-    .lean();
+  let docs;
+  if (apiKeyId) {
+    docs = await Archivo.find({ cliente: clienteId })
+      .select(
+        'rutaRelativa nombre nombreOriginal mime tamaño visibilidad apiKey updatedAt createdAt',
+      )
+      .lean();
+    docs = docs.filter((doc) => perteneceALlave(doc, apiKeyId, prefijosLlave));
+    if (limpio) {
+      const base = `${limpio}/`;
+      docs = docs.filter(
+        (doc) =>
+          normalizarPrefijoLogico(doc.rutaRelativa) === limpio ||
+          normalizarPrefijoLogico(doc.rutaRelativa).startsWith(base),
+      );
+    }
+  } else {
+    const filtro = { cliente: clienteId };
+    if (limpio) {
+      filtro.rutaRelativa = new RegExp(
+        `^${limpio.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`,
+      );
+    }
+    docs = await Archivo.find(filtro)
+      .select(
+        'rutaRelativa nombre nombreOriginal mime tamaño visibilidad apiKey updatedAt createdAt',
+      )
+      .lean();
+  }
 
   const carpetas = new Map();
   const archivos = new Map();
@@ -147,4 +197,6 @@ module.exports = {
   mapaMetadata,
   obtenerPorRuta,
   listarHijosDesdeMetadata,
+  rutasRelativasParaLlave,
+  perteneceALlave,
 };
