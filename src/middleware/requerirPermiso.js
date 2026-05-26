@@ -3,7 +3,10 @@ const AppError = require('../utils/AppError');
 
 function requerirPermiso(permiso) {
   return (req, res, next) => {
-    if (!config.mongodbUri || req.auth?.legacy) {
+    if (req.auth?.panelJwt && !req.auth?.apiKeyDoc) {
+      return next();
+    }
+    if (!config.mongodbUri || req.auth?.legacy || !req.auth?.apiKeyDoc) {
       return next();
     }
     const ok = req.auth?.apiKeyDoc?.permisos?.[permiso];

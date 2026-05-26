@@ -2,15 +2,15 @@ const fs = require('fs/promises');
 const path = require('path');
 const config = require('../config');
 const {
-  ENTIDADES_PERMITIDAS,
   TIPOS_CARPETA_PERMITIDOS,
   SUBCARPETAS_TIPO_ARCHIVO,
+  SEGMENTO_SLUG_RE,
   subcarpetaPorMime,
 } = require('../config/multimedia');
 const AppError = require('../utils/AppError');
 const s3 = require('./multimediaS3Storage');
 const archivoMetadataService = require('./archivoMetadataService');
-const { generarNombreArchivoMultimedia } = require('../utils/generarNombreArchivoMultimedia');
+const { itemVisibleEnPrefijos } = require('../middleware/validarAlcanceMultimedia');
 
 const storageRaiz = () => path.resolve(config.storageDir);
 
@@ -22,21 +22,27 @@ function usaMongoAuth() {
   return Boolean(config.mongodbUri);
 }
 
-const CONTEXTO_SLUG_RE = /^[a-z][a-z0-9_-]{0,62}$/;
+const CONTEXTO_SLUG_RE = SEGMENTO_SLUG_RE;
 
-function validarContexto(contexto) {
-  const c = String(contexto || '').trim().toLowerCase();
-  if (!CONTEXTO_SLUG_RE.test(c)) {
+function validarSegmentoSlug(valor, etiqueta) {
+  const c = String(valor || '').trim().toLowerCase();
+  if (!SEGMENTO_SLUG_RE.test(c)) {
     throw new AppError(
-      'Contexto no válido: use minúsculas, empiece con letra; solo letras, números, guión y guión bajo (máx. 63 caracteres).',
+      `${etiqueta} no válido: use minúsculas, empiece con letra; solo letras, números, guión y guión bajo (máx. 63 caracteres).`,
       400,
     );
   }
+  return c;
+}
+
+function validarContexto(contexto) {
+  validarSegmentoSlug(contexto, 'Contexto');
   // Con MongoDB el aislamiento por contexto se controla de forma dinamica
   // con prefijos por API key. La lista fija global queda para modo legado.
   if (usaMongoAuth()) {
     return;
   }
+  const c = String(contexto || '').trim().toLowerCase();
   const permitidos = config.multimediaContextosPermitidos || [];
   if (permitidos.length > 0 && !permitidos.includes(c)) {
     throw new AppError(
@@ -46,37 +52,26 @@ function validarContexto(contexto) {
   }
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function validarEntidad(entidad) {
+  validarSegmentoSlug(entidad, 'Entidad');
+}
 
 function validarIdentificadorEntidad(entidad, id) {
+  void entidad;
   const valor = String(id || '').trim();
   if (!valor) {
     throw new AppError('El identificador es obligatorio', 400);
   }
-  if (entidad === 'usuarios' || entidad === 'sellers' || entidad === 'productos') {
-    if (!UUID_RE.test(valor)) {
-      const msg =
-        entidad === 'usuarios'
-          ? 'Para usuarios, el identificador debe ser un UUID (publicId)'
-          : entidad === 'sellers'
-            ? 'Para sellers, el identificador debe ser un UUID'
-            : 'Para productos, el identificador debe ser un UUID';
-      throw new AppError(msg, 400);
-    }
-    return;
-  }
-  if (!/^\d+$/.test(valor)) {
-    throw new AppError('El identificador debe ser numérico', 400);
+  if (!/^[a-zA-Z0-9._-]{1,128}$/.test(valor)) {
+    throw new AppError(
+      'Identificador no válido: use letras, números, punto, guion o guion bajo (máx. 128 caracteres).',
+      400,
+    );
   }
 }
 
 function validarEntidadTipo(entidad, tipo) {
-  if (!ENTIDADES_PERMITIDAS.has(entidad)) {
-    throw new AppError(
-      `Entidad no válida. Use: ${[...ENTIDADES_PERMITIDAS].join(', ')}`,
-      400,
-    );
-  }
+  validarEntidad(entidad);
   if (!TIPOS_CARPETA_PERMITIDOS.has(tipo)) {
     throw new AppError(
       `Tipo de carpeta no válido. Use: ${[...TIPOS_CARPETA_PERMITIDOS].join(', ')}`,
@@ -496,6 +491,11 @@ async function enriquecerListadoConUrls(req, items, clienteId) {
     const meta = metaMap.get(item.rutaInternaCliente) || null;
     const vis = meta?.visibilidad || 'publico';
     const nombreOriginal = meta?.nombreOriginal || item.nombre;
+    const mime =
+      meta?.mime ||
+      item.mime ||
+      inferirMimeDesdeRuta(item.rutaInternaCliente, item.subcarpeta);
+    const tamaño = meta?.tamaño ?? item.tamaño;
     let urlFinal = null;
     let accesoPrivado = false;
 
@@ -525,7 +525,8 @@ async function enriquecerListadoConUrls(req, items, clienteId) {
       rutaRelativa: item.rutaRelativa,
       rutaInternaCliente: item.rutaInternaCliente,
       ...(item.subcarpeta ? { subcarpeta: item.subcarpeta } : {}),
-      tamaño: item.tamaño,
+      mime,
+      tamaño,
       modificadoEn: item.modificadoEn,
       visibilidad: usaMongoAuth() && clienteId ? vis : undefined,
       url: urlFinal,
@@ -539,6 +540,279 @@ function resolverRutaAlmacenamientoDesdeInterna(clienteId, rutaInternaCliente) {
   return conPrefijoCliente(clienteId, rutaInternaCliente.replace(/^\/+/, ''));
 }
 
+function contextoDesdePrefijo(prefijoLogico) {
+  const segmentos = String(prefijoLogico || '')
+    .replace(/^\/+|\/+$/g, '')
+    .split('/')
+    .filter(Boolean);
+  return segmentos[0] || null;
+}
+
+function validarPrefijoBrowse(prefijoLogico) {
+  const limpio = String(prefijoLogico || '')
+    .replace(/^\/+|\/+$/g, '')
+    .trim();
+  if (limpio.includes('..')) {
+    throw new AppError('Prefijo de exploración no válido', 400);
+  }
+  const segmentoRe = /^[a-zA-Z0-9._-]{1,128}$/;
+  for (const segmento of limpio.split('/').filter(Boolean)) {
+    if (!segmentoRe.test(segmento)) {
+      throw new AppError('Prefijo de exploración no válido', 400);
+    }
+  }
+  return limpio;
+}
+
+function directorioAbsolutoDesdePrefijo(clienteId, prefijoLogico) {
+  const limpio = validarPrefijoBrowse(prefijoLogico);
+  const rel = conPrefijoCliente(clienteId, limpio);
+  const abs = path.join(storageRaiz(), ...rel.split('/').filter(Boolean));
+  asegurarDentroDeUploads(abs);
+  return abs;
+}
+
+async function explorarLocal(clienteId, prefijoLogico) {
+  const limpio = validarPrefijoBrowse(prefijoLogico);
+  const abs = directorioAbsolutoDesdePrefijo(clienteId, limpio);
+
+  let entradas = [];
+  try {
+    entradas = await fs.readdir(abs, { withFileTypes: true });
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return { prefix: limpio, contexto: contextoDesdePrefijo(limpio), folders: [], files: [] };
+    }
+    throw err;
+  }
+
+  const folders = [];
+  const files = [];
+
+  for (const entrada of entradas) {
+    const nombre = entrada.name;
+    const childPath = limpio ? `${limpio}/${nombre}` : nombre;
+    if (entrada.isDirectory()) {
+      folders.push({
+        kind: 'folder',
+        name: nombre,
+        path: childPath,
+        contexto: contextoDesdePrefijo(childPath),
+      });
+    } else if (entrada.isFile()) {
+      const stat = await fs.stat(path.join(abs, nombre));
+      files.push({
+        kind: 'file',
+        name: nombre,
+        path: childPath,
+        rutaInternaCliente: childPath,
+        rutaRelativa: rutaRelativaDesdeUploads(path.join(abs, nombre)),
+        tamaño: stat.size,
+        modificadoEn: stat.mtime.toISOString(),
+      });
+    }
+  }
+
+  folders.sort((a, b) => a.name.localeCompare(b.name));
+  files.sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    prefix: limpio,
+    contexto: contextoDesdePrefijo(limpio),
+    folders,
+    files,
+  };
+}
+
+function keyALogicaRelativaBrowse(keyCompleta) {
+  const p = s3.normalizarPrefijo(config.s3.keyPrefix);
+  if (p && keyCompleta.startsWith(p)) {
+    return keyCompleta.slice(p.length);
+  }
+  return keyCompleta;
+}
+
+async function explorarS3(clienteId, prefijoLogico) {
+  const limpio = validarPrefijoBrowse(prefijoLogico);
+  const relBase = conPrefijoCliente(clienteId, limpio);
+  const { folders: rawFolders, files: rawFiles } = await s3.listarNivel(relBase);
+
+  const folders = rawFolders.map((f) => {
+    const childPath = limpio ? `${limpio}/${f.name}` : f.name;
+    return {
+      kind: 'folder',
+      name: f.name,
+      path: childPath,
+      contexto: contextoDesdePrefijo(childPath),
+    };
+  });
+
+  const files = rawFiles.map((f) => {
+    const childPath = limpio ? `${limpio}/${f.name}` : f.name;
+    const logica = keyALogicaRelativaBrowse(f.key);
+    return {
+      kind: 'file',
+      name: f.name,
+      path: childPath,
+      rutaInternaCliente: rutaInternaDesdeAlmacenamiento(clienteId, logica),
+      rutaRelativa: logica,
+      tamaño: f.tamaño,
+      modificadoEn: f.modificadoEn,
+    };
+  });
+
+  folders.sort((a, b) => a.name.localeCompare(b.name));
+  files.sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    prefix: limpio,
+    contexto: contextoDesdePrefijo(limpio),
+    folders,
+    files,
+  };
+}
+
+async function explorar(clienteId, prefijoLogico) {
+  if (esAlmacenamientoS3()) {
+    return explorarS3(clienteId, prefijoLogico);
+  }
+  return explorarLocal(clienteId, prefijoLogico);
+}
+
+async function enriquecerExploracion(req, exploracion, clienteId) {
+  const apiKeyDoc = req.auth?.apiKeyDoc;
+  const permEtiqueta = permisosEtiquetaLlave(apiKeyDoc);
+  const prefijos = apiKeyDoc?.prefijos;
+
+  const folderItems = (exploracion.folders || [])
+    .filter((f) => itemVisibleEnPrefijos(f.path, prefijos))
+    .map((f) => ({
+      kind: 'folder',
+      name: f.name,
+      path: f.path,
+      folder: `${f.path}/`,
+      contexto: f.contexto || contextoDesdePrefijo(f.path),
+      permissions: permEtiqueta,
+    }));
+
+  const archivosParaUrls = (exploracion.files || [])
+    .filter((f) => itemVisibleEnPrefijos(f.rutaInternaCliente || f.path, prefijos))
+    .map((f) => ({
+      nombre: f.name,
+      rutaInternaCliente: f.rutaInternaCliente || f.path,
+      rutaRelativa:
+        f.rutaRelativa ||
+        resolverRutaAlmacenamientoDesdeInterna(clienteId, f.rutaInternaCliente || f.path),
+      tamaño: f.tamaño,
+      modificadoEn: f.modificadoEn,
+    }));
+
+  const enriquecidos = await enriquecerListadoConUrls(req, archivosParaUrls, clienteId);
+
+  const fileItems = enriquecidos.map((f) => ({
+    kind: 'file',
+    name: f.nombre,
+    path: f.rutaInternaCliente,
+    folder: f.rutaInternaCliente,
+    rutaInternaCliente: f.rutaInternaCliente,
+    rutaRelativa: f.rutaRelativa,
+    contexto: contextoDesdePrefijo(f.rutaInternaCliente),
+    permissions: `${f.visibilidad === 'privado' ? 'Privado' : 'Público'} · ${permEtiqueta}`,
+    url: f.url,
+    nombreOriginal: f.nombreOriginal,
+    mime: f.mime,
+    subcarpeta: f.subcarpeta,
+    tamaño: f.tamaño,
+    modificadoEn: f.modificadoEn,
+    visibilidad: f.visibilidad,
+    accesoPrivado: f.accesoPrivado,
+  }));
+
+  return {
+    prefix: exploracion.prefix,
+    contexto: exploracion.contexto,
+    items: [...folderItems, ...fileItems],
+    llave: apiKeyDoc
+      ? {
+          id: apiKeyDoc.publicId,
+          nombre: apiKeyDoc.nombre,
+          prefijos: apiKeyDoc.prefijos || [],
+          permisos: apiKeyDoc.permisos || {},
+        }
+      : undefined,
+  };
+}
+
+const MIME_POR_SUBCARPETA = {
+  pdf: 'application/pdf',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+};
+
+function inferirMimeDesdeRuta(rutaInternaCliente, subcarpeta) {
+  if (subcarpeta && MIME_POR_SUBCARPETA[subcarpeta]) {
+    return MIME_POR_SUBCARPETA[subcarpeta];
+  }
+  const segmentos = String(rutaInternaCliente || '').split('/').filter(Boolean);
+  const posibleSub = segmentos.length >= 6 ? segmentos[4] : null;
+  if (posibleSub && MIME_POR_SUBCARPETA[posibleSub]) {
+    return MIME_POR_SUBCARPETA[posibleSub];
+  }
+  const nombre = segmentos[segmentos.length - 1] || '';
+  const ext = nombre.includes('.') ? nombre.split('.').pop().toLowerCase() : '';
+  const porExt = {
+    pdf: 'application/pdf',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+  };
+  return porExt[ext] || null;
+}
+
+async function resolverUrlFirmaLectura(req, clienteId, rutaInternaCliente, segundos) {
+  const multimediaAccesoLocal = require('./multimediaAccesoLocal');
+  const expira = Math.min(
+    Number(segundos) || config.signedUrlExpiresSeconds,
+    config.signedUrlExpiresSeconds,
+  );
+  if (esAlmacenamientoS3()) {
+    const rel = resolverRutaAlmacenamientoDesdeInterna(clienteId, rutaInternaCliente);
+    const url = await s3.urlFirmaLectura(s3.claveCompleta(rel), expira);
+    return { url, expiraEnSegundos: expira };
+  }
+  const token = multimediaAccesoLocal.firmarToken(
+    { clienteId: String(clienteId), rutaRelativaCliente: rutaInternaCliente },
+    expira,
+  );
+  const base = baseUrlPeticion(req);
+  return {
+    url: `${base}/api/v1/multimedia/acceso/${token}`,
+    expiraEnSegundos: expira,
+  };
+}
+
+function permisosEtiquetaLlave(apiKeyDoc) {
+  if (!apiKeyDoc) {
+    return 'Read/Write/Delete';
+  }
+  const p = apiKeyDoc.permisos || {};
+  const parts = [];
+  if (p.read !== false) {
+    parts.push('Read');
+  }
+  if (p.write) {
+    parts.push('Write');
+  }
+  if (p.delete) {
+    parts.push('Delete');
+  }
+  return parts.join('/') || '—';
+}
+
 module.exports = {
   obtenerDirectorioAbsoluto,
   asegurarDentroDeUploads,
@@ -549,6 +823,7 @@ module.exports = {
   procesarSubida,
   enriquecerListadoConUrls,
   validarContexto,
+  validarEntidad,
   validarEntidadTipo,
   validarIdentificadorEntidad,
   validarNombreArchivoSeguro,
@@ -559,4 +834,10 @@ module.exports = {
   conPrefijoCliente,
   existeArchivoEnAlmacenamiento,
   baseUrlPeticion,
+  explorar,
+  enriquecerExploracion,
+  contextoDesdePrefijo,
+  validarPrefijoBrowse,
+  resolverUrlFirmaLectura,
+  inferirMimeDesdeRuta,
 };

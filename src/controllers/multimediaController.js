@@ -9,8 +9,6 @@ const config = require('../config');
 const { nombreCampoArchivo } = require('../middleware/multerMultimedia');
 const { SUBCARPETAS_TIPO_ARCHIVO } = require('../config/multimedia');
 const { alcanzaPrefijos } = require('../middleware/validarAlcanceMultimedia');
-const s3 = require('../services/multimediaS3Storage');
-const multimediaAccesoLocal = require('../services/multimediaAccesoLocal');
 
 function clienteIdParaRutas(req) {
   if (!config.mongodbUri || req.auth?.legacy || !req.auth?.cliente?._id) {
@@ -19,82 +17,17 @@ function clienteIdParaRutas(req) {
   return String(req.auth.cliente._id);
 }
 
-async function listar(req, res) {
-  const { contexto, entidad, id, tipo } = req.params;
-  const cid = clienteIdParaRutas(req);
-  const items = await multimediaService.listarArchivos(cid, contexto, entidad, id, tipo);
-  const data = await multimediaService.enriquecerListadoConUrls(req, items, cid);
-  await auditoriaService.registrar({
-    clienteId: req.auth?.cliente?._id,
-    apiKeyId: req.auth?.apiKeyDoc?._id,
-    origen: 'api_key',
-    accion: 'multimedia.listar',
-    metodo: req.method,
-    ruta: req.originalUrl,
-    statusCode: 200,
-    detalle: { contexto, entidad, id, tipo },
-  });
-  res.json({ data });
+function origenAuditoria(req) {
+  if (req.auth?.panelJwt) {
+    return 'panel_jwt';
+  }
+  if (req.auth?.apiKeyDoc) {
+    return 'api_key';
+  }
+  return 'api_key';
 }
 
-async function subir(req, res) {
-  if (!req.file) {
-    throw new AppError(
-      `Debe enviar un archivo en el campo multipart "${nombreCampoArchivo}"`,
-      400,
-    );
-  }
-  const data = await multimediaService.procesarSubida(req);
-  await auditoriaService.registrar({
-    clienteId: req.auth?.cliente?._id,
-    apiKeyId: req.auth?.apiKeyDoc?._id,
-    origen: 'api_key',
-    accion: 'multimedia.subir',
-    metodo: req.method,
-    ruta: req.originalUrl,
-    statusCode: 201,
-    detalle: { rutaInterna: data.rutaInternaCliente },
-  });
-  res.status(201).json({ data });
-}
-
-async function eliminar(req, res) {
-  const { contexto, entidad, id, tipo, archivo } = req.params;
-  const cid = clienteIdParaRutas(req);
-  const resultado = await multimediaService.eliminarArchivo(
-    cid,
-    contexto,
-    entidad,
-    id,
-    tipo,
-    archivo,
-  );
-  if (config.mongodbUri && !req.auth?.legacy) {
-    await archivoMetadataService.eliminarPorRuta(req.auth.cliente._id, resultado.rutaInternaCliente);
-  }
-  await auditoriaService.registrar({
-    clienteId: req.auth?.cliente?._id,
-    apiKeyId: req.auth?.apiKeyDoc?._id,
-    origen: 'api_key',
-    accion: 'multimedia.eliminar',
-    metodo: req.method,
-    ruta: req.originalUrl,
-    statusCode: 200,
-    detalle: { contexto, entidad, id, tipo, archivo },
-  });
-  res.json({ data: resultado });
-}
-
-async function solicitarUrlFirma(req, res) {
-  const { rutaInternaCliente, segundos } = req.body || {};
-  const ruta = String(rutaInternaCliente || '').trim();
-  if (!ruta || ruta.includes('..')) {
-    throw new AppError('rutaInternaCliente inválida', 400);
-  }
-  if (!config.mongodbUri || req.auth?.legacy) {
-    throw new AppError('Disponible solo con MONGODB_URI y API key de cliente', 400);
-  }
-
+function parsearRutaInternaCliente(ruta) {
   const segmentos = ruta.split('/').filter(Boolean);
   if (segmentos.length !== 5 && segmentos.length !== 6) {
     throw new AppError(
@@ -124,10 +57,91 @@ async function solicitarUrlFirma(req, res) {
   multimediaService.validarEntidadTipo(entidad, tipo);
   multimediaService.validarIdentificadorEntidad(entidad, id);
   multimediaService.validarNombreArchivoSeguro(nombreArchivo);
+  return { contexto, entidad, id, tipo, nombreArchivo, carpeta: `${contexto}/${entidad}/${id}/${tipo}` };
+}
 
-  const carpeta = `${contexto}/${entidad}/${id}/${tipo}`;
-  const prefs = req.auth.apiKeyDoc.prefijos || [];
-  if (!alcanzaPrefijos(carpeta, prefs)) {
+async function listar(req, res) {
+  const { contexto, entidad, id, tipo } = req.params;
+  const cid = clienteIdParaRutas(req);
+  const items = await multimediaService.listarArchivos(cid, contexto, entidad, id, tipo);
+  const data = await multimediaService.enriquecerListadoConUrls(req, items, cid);
+  await auditoriaService.registrar({
+    clienteId: req.auth?.cliente?._id,
+    apiKeyId: req.auth?.apiKeyDoc?._id,
+    origen: origenAuditoria(req),
+    accion: 'multimedia.listar',
+    metodo: req.method,
+    ruta: req.originalUrl,
+    statusCode: 200,
+    detalle: { contexto, entidad, id, tipo },
+  });
+  res.json({ data });
+}
+
+async function subir(req, res) {
+  if (!req.file) {
+    throw new AppError(
+      `Debe enviar un archivo en el campo multipart "${nombreCampoArchivo}"`,
+      400,
+    );
+  }
+  const data = await multimediaService.procesarSubida(req);
+  await auditoriaService.registrar({
+    clienteId: req.auth?.cliente?._id,
+    apiKeyId: req.auth?.apiKeyDoc?._id,
+    origen: origenAuditoria(req),
+    accion: 'multimedia.subir',
+    metodo: req.method,
+    ruta: req.originalUrl,
+    statusCode: 201,
+    detalle: { rutaInterna: data.rutaInternaCliente },
+  });
+  res.status(201).json({ data });
+}
+
+async function eliminar(req, res) {
+  const { contexto, entidad, id, tipo, archivo } = req.params;
+  const cid = clienteIdParaRutas(req);
+  const resultado = await multimediaService.eliminarArchivo(
+    cid,
+    contexto,
+    entidad,
+    id,
+    tipo,
+    archivo,
+  );
+  if (config.mongodbUri && !req.auth?.legacy) {
+    await archivoMetadataService.eliminarPorRuta(req.auth.cliente._id, resultado.rutaInternaCliente);
+  }
+  await auditoriaService.registrar({
+    clienteId: req.auth?.cliente?._id,
+    apiKeyId: req.auth?.apiKeyDoc?._id,
+    origen: origenAuditoria(req),
+    accion: 'multimedia.eliminar',
+    metodo: req.method,
+    ruta: req.originalUrl,
+    statusCode: 200,
+    detalle: { contexto, entidad, id, tipo, archivo },
+  });
+  res.json({ data: resultado });
+}
+
+async function solicitarUrlFirma(req, res) {
+  const { rutaInternaCliente, segundos } = req.body || {};
+  const ruta = String(rutaInternaCliente || '').trim();
+  if (!ruta || ruta.includes('..')) {
+    throw new AppError('rutaInternaCliente inválida', 400);
+  }
+  if (!config.mongodbUri || req.auth?.legacy) {
+    throw new AppError('Disponible solo con MONGODB_URI', 400);
+  }
+  if (!req.auth?.cliente?._id) {
+    throw new AppError('Cliente no identificado', 401);
+  }
+
+  const parsed = parsearRutaInternaCliente(ruta);
+  const prefs = req.auth.apiKeyDoc?.prefijos || [];
+  if (req.auth.apiKeyDoc && prefs.length > 0 && !alcanzaPrefijos(parsed.carpeta, prefs)) {
     throw new AppError('La ruta está fuera del alcance de esta API key', 403);
   }
 
@@ -137,28 +151,17 @@ async function solicitarUrlFirma(req, res) {
     throw new AppError('Archivo no encontrado', 404);
   }
 
-  let url;
-  const expira = Math.min(
-    Number(segundos) || config.signedUrlExpiresSeconds,
-    config.signedUrlExpiresSeconds,
+  const resultado = await multimediaService.resolverUrlFirmaLectura(
+    req,
+    clienteId,
+    ruta,
+    segundos,
   );
-
-  if (multimediaService.esAlmacenamientoS3()) {
-    const rel = multimediaService.resolverRutaAlmacenamientoDesdeInterna(clienteId, ruta);
-    url = await s3.urlFirmaLectura(s3.claveCompleta(rel), expira);
-  } else {
-    const token = multimediaAccesoLocal.firmarToken(
-      { clienteId, rutaRelativaCliente: ruta },
-      expira,
-    );
-    const base = multimediaService.baseUrlPeticion(req);
-    url = `${base}/api/v1/multimedia/acceso/${token}`;
-  }
 
   await auditoriaService.registrar({
     clienteId: req.auth.cliente._id,
-    apiKeyId: req.auth.apiKeyDoc?._id,
-    origen: 'api_key',
+    apiKeyId: req.auth?.apiKeyDoc?._id,
+    origen: origenAuditoria(req),
     accion: 'multimedia.url_firma',
     metodo: req.method,
     ruta: req.originalUrl,
@@ -166,16 +169,30 @@ async function solicitarUrlFirma(req, res) {
     detalle: { rutaInternaCliente: ruta },
   });
 
-  res.json({
-    data: {
-      url,
-      expiraEnSegundos: expira,
-    },
+  res.json({ data: resultado });
+}
+
+async function explorar(req, res) {
+  const prefix = String(req.query.prefix || '').trim();
+  const cid = clienteIdParaRutas(req);
+  const exploracion = await multimediaService.explorar(cid, prefix);
+  const data = await multimediaService.enriquecerExploracion(req, exploracion, cid);
+  await auditoriaService.registrar({
+    clienteId: req.auth?.cliente?._id,
+    apiKeyId: req.auth?.apiKeyDoc?._id,
+    origen: origenAuditoria(req),
+    accion: 'multimedia.explorar',
+    metodo: req.method,
+    ruta: req.originalUrl,
+    statusCode: 200,
+    detalle: { prefix: data.prefix, items: data.items?.length ?? 0 },
   });
+  res.json({ data });
 }
 
 async function accesoLocalPorToken(req, res, next) {
   try {
+    const multimediaAccesoLocal = require('../services/multimediaAccesoLocal');
     const payload = multimediaAccesoLocal.verificarToken(req.params.token);
     if (!payload.rel || String(payload.rel).includes('..')) {
       throw new AppError('Enlace inválido', 401);
@@ -189,7 +206,6 @@ async function accesoLocalPorToken(req, res, next) {
     const clienteOid = mongoose.Types.ObjectId.isValid(payload.cid)
       ? new mongoose.Types.ObjectId(payload.cid)
       : undefined;
-    // Helmet envía CORP same-origin por defecto; el admin (otro origen/puerto) no puede usar <img src=".../acceso/...">.
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.sendFile(path.resolve(abs), (err) => {
       if (err) return next(err);
@@ -216,5 +232,6 @@ module.exports = {
   subir,
   eliminar,
   solicitarUrlFirma,
+  explorar,
   accesoLocalPorToken,
 };

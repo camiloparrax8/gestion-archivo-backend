@@ -77,24 +77,56 @@ function parseSecurity(security) {
   return out;
 }
 
-function generateExampleFromSchema(schema) {
-  if (!schema || typeof schema !== 'object') {
+function resolveRef(spec, ref) {
+  if (!ref || typeof ref !== 'string' || !ref.startsWith('#/')) {
     return null;
   }
-  if (schema.example !== undefined) {
-    return schema.example;
+  const parts = ref.slice(2).split('/');
+  let cur = spec;
+  for (const part of parts) {
+    cur = cur?.[part];
+  }
+  return cur ?? null;
+}
+
+function resolveSchema(spec, schema) {
+  if (!schema || typeof schema !== 'object') {
+    return schema;
+  }
+  if (schema.$ref) {
+    return resolveSchema(spec, resolveRef(spec, schema.$ref));
+  }
+  return schema;
+}
+
+function normalizeParameters(spec, parameters) {
+  if (!Array.isArray(parameters)) {
+    return [];
+  }
+  return parameters
+    .map((param) => (param?.$ref ? resolveRef(spec, param.$ref) : param))
+    .filter(Boolean);
+}
+
+function generateExampleFromSchema(spec, schema) {
+  const resolved = resolveSchema(spec, schema);
+  if (!resolved || typeof resolved !== 'object') {
+    return null;
+  }
+  if (resolved.example !== undefined) {
+    return resolved.example;
   }
 
-  if (schema.type === 'object' && schema.properties) {
+  if (resolved.type === 'object' && resolved.properties) {
     const obj = {};
-    for (const [key, prop] of Object.entries(schema.properties)) {
-      obj[key] = generateExampleFromSchema(prop);
+    for (const [key, prop] of Object.entries(resolved.properties)) {
+      obj[key] = generateExampleFromSchema(spec, prop);
     }
     return obj;
   }
 
-  if (schema.type === 'array' && schema.items) {
-    return [generateExampleFromSchema(schema.items)];
+  if (resolved.type === 'array' && resolved.items) {
+    return [generateExampleFromSchema(spec, resolved.items)];
   }
 
   const defaultExamples = {
@@ -104,7 +136,7 @@ function generateExampleFromSchema(schema) {
     boolean: true,
   };
 
-  return schema.example ?? defaultExamples[schema.type] ?? null;
+  return resolved.example ?? defaultExamples[resolved.type] ?? null;
 }
 
 function generateCollection() {
@@ -127,18 +159,30 @@ function generateCollection() {
       const { raw: urlRawBase, host, path: pathSegments } = buildPostmanUrl(route);
 
       const queryParams = [];
-      if (detail.parameters) {
-        for (const param of detail.parameters) {
-          if (param.in === 'query') {
-            queryParams.push({
-              key: param.name,
-              value:
-                param.schema?.example !== undefined && param.schema?.example !== null
-                  ? String(param.schema.example)
-                  : '',
-              description: param.description,
-            });
-          }
+      const headerParams = [];
+      for (const param of normalizeParameters(spec, detail.parameters)) {
+        if (param.in === 'query') {
+          const defaultVal =
+            param.name === 'prefix'
+              ? 'orion/productos'
+              : param.name === 'llaveId'
+                ? '{{llave_id}}'
+                : '';
+          queryParams.push({
+            key: param.name,
+            value:
+              param.schema?.example !== undefined && param.schema?.example !== null
+                ? String(param.schema.example)
+                : defaultVal,
+            description: param.description,
+          });
+        }
+        if (param.in === 'header') {
+          headerParams.push({
+            key: param.name,
+            value: param.name === 'X-Llave-Id' ? '{{llave_id}}' : '',
+            description: param.description,
+          });
         }
       }
 
@@ -165,6 +209,11 @@ function generateCollection() {
       if (sec.masterKey) {
         headers.push({ key: 'X-Master-Key', value: '{{master_api_key}}' });
       }
+      for (const hp of headerParams) {
+        if (!headers.some((h) => h.key === hp.key)) {
+          headers.push(hp);
+        }
+      }
 
       /** @type {Record<string, unknown>} */
       const item = {
@@ -183,7 +232,7 @@ function generateCollection() {
       };
 
       if (jsonBodyContent?.schema) {
-        const exampleBody = generateExampleFromSchema(jsonBodyContent.schema);
+        const exampleBody = generateExampleFromSchema(spec, jsonBodyContent.schema);
         item.request.body = {
           mode: 'raw',
           raw: JSON.stringify(exampleBody, null, 2),
@@ -249,6 +298,7 @@ function generateCollection() {
       { key: 'ID_TOKEN', value: '', type: 'string' },
       { key: 'api_key', value: '', type: 'string' },
       { key: 'master_api_key', value: '', type: 'string' },
+      { key: 'llave_id', value: '', type: 'string', description: 'publicId de API key (opcional, panel JWT)' },
     ],
     item: Object.entries(folders)
       .sort(([a], [b]) => a.localeCompare(b))
