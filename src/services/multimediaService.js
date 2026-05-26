@@ -350,6 +350,84 @@ async function eliminarArchivo(clienteId, contexto, entidad, id, tipo, nombreArc
   return eliminarArchivoLocal(clienteId, contexto, entidad, id, tipo, nombreArchivo);
 }
 
+async function limpiarCarpetasVaciasHaciaArriba(absDesde) {
+  let actual = path.dirname(absDesde);
+  const raiz = path.resolve(storageRaiz());
+  while (actual.startsWith(raiz) && actual !== raiz) {
+    let entradas = [];
+    try {
+      entradas = await fs.readdir(actual);
+    } catch (err) {
+      if (err.code === 'ENOENT') break;
+      throw err;
+    }
+    if (entradas.length > 0) break;
+    await fs.rmdir(actual);
+    actual = path.dirname(actual);
+  }
+}
+
+async function eliminarPrefijoLocal(clienteId, prefijoLogico) {
+  const limpio = validarPrefijoBrowse(prefijoLogico);
+  if (!limpio) {
+    throw new AppError('Debe indicar la carpeta a eliminar', 400);
+  }
+  const abs = directorioAbsolutoDesdePrefijo(clienteId, limpio);
+  let archivosDisco = 0;
+  try {
+    const st = await fs.stat(abs);
+    if (st.isDirectory()) {
+      archivosDisco = await contarArchivosEnArbol(abs);
+      await fs.rm(abs, { recursive: true, force: true });
+    } else if (st.isFile()) {
+      await fs.unlink(abs);
+      archivosDisco = 1;
+      await limpiarCarpetasVaciasHaciaArriba(abs);
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      throw err;
+    }
+  }
+  return { prefix: limpio, archivosDisco };
+}
+
+async function contarArchivosEnArbol(absDir) {
+  let total = 0;
+  const entradas = await fs.readdir(absDir, { withFileTypes: true });
+  for (const entrada of entradas) {
+    const abs = path.join(absDir, entrada.name);
+    if (entrada.isDirectory()) {
+      total += await contarArchivosEnArbol(abs);
+    } else if (entrada.isFile()) {
+      total += 1;
+    }
+  }
+  return total;
+}
+
+async function eliminarPrefijo(clienteId, prefijoLogico) {
+  const limpio = validarPrefijoBrowse(prefijoLogico);
+  if (!limpio) {
+    throw new AppError('Debe indicar la carpeta a eliminar (prefijo)', 400);
+  }
+  if (esAlmacenamientoS3()) {
+    throw new AppError('Eliminar carpetas no está disponible con almacenamiento S3', 501);
+  }
+  const disco = await eliminarPrefijoLocal(clienteId, limpio);
+
+  let meta = { eliminados: 0 };
+  if (usaMongoAuth() && clienteId) {
+    meta = await archivoMetadataService.eliminarPorPrefijo(clienteId, limpio);
+  }
+
+  return {
+    prefix: limpio,
+    archivosEliminadosDisco: disco.archivosDisco,
+    metadatosEliminados: meta.eliminados,
+  };
+}
+
 async function subirArchivoS3(req, file, clienteId) {
   const { contexto, entidad, id, tipo } = req.params;
   validarContexto(contexto);
@@ -914,6 +992,7 @@ module.exports = {
   construirUrlPublicaMedia,
   listarArchivos,
   eliminarArchivo,
+  eliminarPrefijo,
   procesarSubida,
   enriquecerListadoConUrls,
   validarContexto,

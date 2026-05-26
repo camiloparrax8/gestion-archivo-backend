@@ -31,6 +31,20 @@ async function eliminarPorRuta(clienteId, rutaRelativaCliente) {
   await Archivo.findOneAndDelete({ cliente: clienteId, rutaRelativa: rutaRelativaCliente });
 }
 
+/** Elimina metadatos bajo un prefijo lógico (carpeta y todo su contenido). */
+async function eliminarPorPrefijo(clienteId, prefijoLogico) {
+  const limpio = normalizarPrefijoLogico(prefijoLogico);
+  if (!limpio) {
+    return { eliminados: 0 };
+  }
+  const escaped = limpio.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const result = await Archivo.deleteMany({
+    cliente: clienteId,
+    $or: [{ rutaRelativa: limpio }, { rutaRelativa: new RegExp(`^${escaped}/`) }],
+  });
+  return { eliminados: result.deletedCount || 0 };
+}
+
 async function mapaVisibilidad(clienteId, rutasCliente) {
   if (!clienteId || !rutasCliente.length) {
     return new Map();
@@ -193,6 +207,7 @@ async function listarHijosDesdeMetadata(clienteId, prefijoLogico, opciones = {})
 module.exports = {
   upsertTrasSubida,
   eliminarPorRuta,
+  eliminarPorPrefijo,
   mapaVisibilidad,
   mapaMetadata,
   obtenerPorRuta,
