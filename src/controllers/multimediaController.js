@@ -141,7 +141,12 @@ async function solicitarUrlFirma(req, res) {
 
   const parsed = parsearRutaInternaCliente(ruta);
   const prefs = req.auth.apiKeyDoc?.prefijos || [];
-  if (req.auth.apiKeyDoc && prefs.length > 0 && !alcanzaPrefijos(parsed.carpeta, prefs)) {
+  if (
+    !req.auth?.panelJwt &&
+    req.auth.apiKeyDoc &&
+    prefs.length > 0 &&
+    !alcanzaPrefijos(parsed.carpeta, prefs)
+  ) {
     throw new AppError('La ruta está fuera del alcance de esta API key', 403);
   }
 
