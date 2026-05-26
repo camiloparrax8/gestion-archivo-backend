@@ -531,6 +531,7 @@ async function enriquecerListadoConUrls(req, items, clienteId) {
       visibilidad: usaMongoAuth() && clienteId ? vis : undefined,
       url: urlFinal,
       accesoPrivado,
+      apiKeyId: meta?.apiKeyId || item.apiKeyId || null,
     });
   }
   return out;
@@ -587,8 +588,22 @@ function fusionarExploracionConMetadata(exploracionFs, exploracionMeta) {
   return { folders: foldersArr, files: filesArr };
 }
 
-async function explorarLocal(clienteId, prefijoLogico) {
+async function explorarLocal(clienteId, prefijoLogico, opciones = {}) {
   const limpio = validarPrefijoBrowse(prefijoLogico);
+  const apiKeyId = opciones.apiKeyId || null;
+
+  if (apiKeyId && usaMongoAuth() && clienteId) {
+    const meta = await archivoMetadataService.listarHijosDesdeMetadata(clienteId, limpio, {
+      apiKeyId,
+    });
+    return {
+      prefix: limpio,
+      contexto: contextoDesdePrefijo(limpio),
+      folders: meta.folders,
+      files: meta.files,
+    };
+  }
+
   const abs = directorioAbsolutoDesdePrefijo(clienteId, limpio);
 
   let entradas = [];
@@ -629,7 +644,9 @@ async function explorarLocal(clienteId, prefijoLogico) {
 
   let fusion = { folders, files };
   if (usaMongoAuth() && clienteId) {
-    const meta = await archivoMetadataService.listarHijosDesdeMetadata(clienteId, limpio);
+    const meta = await archivoMetadataService.listarHijosDesdeMetadata(clienteId, limpio, {
+      apiKeyId: apiKeyId || undefined,
+    });
     fusion = fusionarExploracionConMetadata(fusion, meta);
   }
 
@@ -649,8 +666,22 @@ function keyALogicaRelativaBrowse(keyCompleta) {
   return keyCompleta;
 }
 
-async function explorarS3(clienteId, prefijoLogico) {
+async function explorarS3(clienteId, prefijoLogico, opciones = {}) {
   const limpio = validarPrefijoBrowse(prefijoLogico);
+  const apiKeyId = opciones.apiKeyId || null;
+
+  if (apiKeyId && usaMongoAuth() && clienteId) {
+    const meta = await archivoMetadataService.listarHijosDesdeMetadata(clienteId, limpio, {
+      apiKeyId,
+    });
+    return {
+      prefix: limpio,
+      contexto: contextoDesdePrefijo(limpio),
+      folders: meta.folders,
+      files: meta.files,
+    };
+  }
+
   const relBase = conPrefijoCliente(clienteId, limpio);
   const { folders: rawFolders, files: rawFiles } = await s3.listarNivel(relBase);
 
@@ -680,7 +711,9 @@ async function explorarS3(clienteId, prefijoLogico) {
 
   let fusion = { folders, files };
   if (usaMongoAuth() && clienteId) {
-    const meta = await archivoMetadataService.listarHijosDesdeMetadata(clienteId, limpio);
+    const meta = await archivoMetadataService.listarHijosDesdeMetadata(clienteId, limpio, {
+      apiKeyId: apiKeyId || undefined,
+    });
     fusion = fusionarExploracionConMetadata(fusion, meta);
   }
 
@@ -692,17 +725,18 @@ async function explorarS3(clienteId, prefijoLogico) {
   };
 }
 
-async function explorar(clienteId, prefijoLogico) {
+async function explorar(clienteId, prefijoLogico, opciones = {}) {
   if (esAlmacenamientoS3()) {
-    return explorarS3(clienteId, prefijoLogico);
+    return explorarS3(clienteId, prefijoLogico, opciones);
   }
-  return explorarLocal(clienteId, prefijoLogico);
+  return explorarLocal(clienteId, prefijoLogico, opciones);
 }
 
 async function enriquecerExploracion(req, exploracion, clienteId) {
   const apiKeyDoc = req.auth?.apiKeyDoc;
   const permEtiqueta = permisosEtiquetaLlave(apiKeyDoc);
-  const prefijos = apiKeyDoc?.prefijos;
+  /** El browse filtra por apiKey usada en la subida (explorar), no por prefijos de ruta. */
+  const prefijos = null;
 
   const folderItems = (exploracion.folders || [])
     .filter((f) => itemVisibleEnPrefijos(f.path, prefijos))
@@ -725,6 +759,7 @@ async function enriquecerExploracion(req, exploracion, clienteId) {
         resolverRutaAlmacenamientoDesdeInterna(clienteId, f.rutaInternaCliente || f.path),
       tamaño: f.tamaño,
       modificadoEn: f.modificadoEn,
+      apiKeyId: f.apiKeyId || null,
     }));
 
   const enriquecidos = await enriquecerListadoConUrls(req, archivosParaUrls, clienteId);
@@ -746,12 +781,16 @@ async function enriquecerExploracion(req, exploracion, clienteId) {
     modificadoEn: f.modificadoEn,
     visibilidad: f.visibilidad,
     accesoPrivado: f.accesoPrivado,
+    apiKeyId: f.apiKeyId || null,
   }));
 
   return {
     prefix: exploracion.prefix,
     contexto: exploracion.contexto,
     items: [...folderItems, ...fileItems],
+    filtroLlave: apiKeyDoc
+      ? { por: 'apiKey', id: apiKeyDoc.publicId, nombre: apiKeyDoc.nombre }
+      : undefined,
     llave: apiKeyDoc
       ? {
           id: apiKeyDoc.publicId,
