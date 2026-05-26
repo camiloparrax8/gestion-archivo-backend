@@ -171,7 +171,10 @@ async function explorar(req, res) {
   const prefix = String(req.query.prefix || '').trim();
   const cid = clienteIdParaRutas(req);
   const apiKeyId = req.auth?.apiKeyDoc?._id ?? null;
-  const exploracion = await multimediaService.explorar(cid, prefix, { apiKeyId });
+  const exploracion = await multimediaService.explorar(cid, prefix, {
+    apiKeyId,
+    prefijosLlave: req.auth?.apiKeyDoc?.prefijos || [],
+  });
   const data = await multimediaService.enriquecerExploracion(req, exploracion, cid);
   await auditoriaService.registrar({
     clienteId: req.auth?.cliente?._id,

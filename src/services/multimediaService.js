@@ -588,21 +588,47 @@ function fusionarExploracionConMetadata(exploracionFs, exploracionMeta) {
   return { folders: foldersArr, files: filesArr };
 }
 
+function rutaVisibleParaLlave(rutaPermitida, childPath) {
+  const ruta = String(rutaPermitida || '').replace(/^\/+|\/+$/g, '');
+  const hijo = String(childPath || '').replace(/^\/+|\/+$/g, '');
+  if (!ruta || !hijo) {
+    return false;
+  }
+  return ruta === hijo || ruta.startsWith(`${hijo}/`);
+}
+
+function filtrarExploracionPorLlave(exploracion, prefijoLogico, rutasPermitidas) {
+  const limpio = String(prefijoLogico || '').replace(/^\/+|\/+$/g, '');
+  const permitidas = Array.isArray(rutasPermitidas) ? rutasPermitidas : [];
+  if (!permitidas.length) {
+    return { folders: [], files: [] };
+  }
+
+  const folders = (exploracion.folders || []).filter((f) => {
+    const path = String(f.path || '').replace(/^\/+|\/+$/g, '');
+    return permitidas.some((ruta) => rutaVisibleParaLlave(ruta, path));
+  });
+
+  const files = (exploracion.files || []).filter((f) => {
+    const path = String(f.rutaInternaCliente || f.path || '').replace(/^\/+|\/+$/g, '');
+    return permitidas.some((ruta) => {
+      if (ruta === path) {
+        return true;
+      }
+      if (limpio && path === limpio) {
+        return true;
+      }
+      return false;
+    });
+  });
+
+  return { folders, files };
+}
+
 async function explorarLocal(clienteId, prefijoLogico, opciones = {}) {
   const limpio = validarPrefijoBrowse(prefijoLogico);
   const apiKeyId = opciones.apiKeyId || null;
-
-  if (apiKeyId && usaMongoAuth() && clienteId) {
-    const meta = await archivoMetadataService.listarHijosDesdeMetadata(clienteId, limpio, {
-      apiKeyId,
-    });
-    return {
-      prefix: limpio,
-      contexto: contextoDesdePrefijo(limpio),
-      folders: meta.folders,
-      files: meta.files,
-    };
-  }
+  const prefijosLlave = opciones.prefijosLlave || [];
 
   const abs = directorioAbsolutoDesdePrefijo(clienteId, limpio);
 
@@ -646,8 +672,18 @@ async function explorarLocal(clienteId, prefijoLogico, opciones = {}) {
   if (usaMongoAuth() && clienteId) {
     const meta = await archivoMetadataService.listarHijosDesdeMetadata(clienteId, limpio, {
       apiKeyId: apiKeyId || undefined,
+      prefijosLlave,
     });
     fusion = fusionarExploracionConMetadata(fusion, meta);
+  }
+
+  if (apiKeyId && usaMongoAuth() && clienteId) {
+    const rutasPermitidas = await archivoMetadataService.rutasRelativasParaLlave(
+      clienteId,
+      apiKeyId,
+      prefijosLlave,
+    );
+    fusion = filtrarExploracionPorLlave(fusion, limpio, rutasPermitidas);
   }
 
   return {
@@ -669,18 +705,7 @@ function keyALogicaRelativaBrowse(keyCompleta) {
 async function explorarS3(clienteId, prefijoLogico, opciones = {}) {
   const limpio = validarPrefijoBrowse(prefijoLogico);
   const apiKeyId = opciones.apiKeyId || null;
-
-  if (apiKeyId && usaMongoAuth() && clienteId) {
-    const meta = await archivoMetadataService.listarHijosDesdeMetadata(clienteId, limpio, {
-      apiKeyId,
-    });
-    return {
-      prefix: limpio,
-      contexto: contextoDesdePrefijo(limpio),
-      folders: meta.folders,
-      files: meta.files,
-    };
-  }
+  const prefijosLlave = opciones.prefijosLlave || [];
 
   const relBase = conPrefijoCliente(clienteId, limpio);
   const { folders: rawFolders, files: rawFiles } = await s3.listarNivel(relBase);
@@ -713,8 +738,18 @@ async function explorarS3(clienteId, prefijoLogico, opciones = {}) {
   if (usaMongoAuth() && clienteId) {
     const meta = await archivoMetadataService.listarHijosDesdeMetadata(clienteId, limpio, {
       apiKeyId: apiKeyId || undefined,
+      prefijosLlave,
     });
     fusion = fusionarExploracionConMetadata(fusion, meta);
+  }
+
+  if (apiKeyId && usaMongoAuth() && clienteId) {
+    const rutasPermitidas = await archivoMetadataService.rutasRelativasParaLlave(
+      clienteId,
+      apiKeyId,
+      prefijosLlave,
+    );
+    fusion = filtrarExploracionPorLlave(fusion, limpio, rutasPermitidas);
   }
 
   return {
