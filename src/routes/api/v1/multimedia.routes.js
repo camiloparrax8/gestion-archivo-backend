@@ -28,6 +28,9 @@ const router = express.Router();
  *   post:
  *     tags: [Multimedia]
  *     summary: Solicitar URL firmada (S3) o token de acceso (local)
+ *     description: |
+ *       Integraciones con API Key. Body con rutaInternaCliente (5 o 6 segmentos).
+ *       El cliente en MongoDB se resuelve desde la API key; no envíe clienteId.
  *     security:
  *       - apiKeyAuth: []
  *     requestBody:
@@ -35,16 +38,16 @@ const router = express.Router();
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               contexto: { type: string }
- *               entidad: { type: string }
- *               id: { type: string }
- *               tipo: { type: string }
- *               archivo: { type: string, description: "Nombre del archivo (cuando aplique)" }
+ *             $ref: '#/components/schemas/MultimediaUrlFirmaRequest'
  *     responses:
- *       200: { description: OK }
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MultimediaUrlFirmaResponse'
  *       401: { description: API key requerida/no válida }
+ *       403: { description: Sin permiso read o fuera de prefijos }
  *
  * /v1/multimedia/{contexto}/{entidad}/{id}/{tipo}:
  *   get:
@@ -53,67 +56,53 @@ const router = express.Router();
  *     security:
  *       - apiKeyAuth: []
  *     parameters:
- *       - in: path
- *         name: contexto
- *         required: true
- *         schema: { type: string }
- *       - in: path
- *         name: entidad
- *         required: true
- *         schema:
- *           type: string
- *           enum: [usuarios, productos, pedidos, sellers]
- *         description: "usuarios y sellers usan id UUID; productos y pedidos id numérico"
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *         description: "UUID si entidad es usuarios o sellers; numérico si productos o pedidos"
- *       - in: path
- *         name: tipo
- *         required: true
- *         schema: { type: string }
+ *       - $ref: '#/components/parameters/MultimediaContexto'
+ *       - $ref: '#/components/parameters/MultimediaEntidad'
+ *       - $ref: '#/components/parameters/MultimediaResourceId'
+ *       - $ref: '#/components/parameters/MultimediaTipo'
  *     responses:
- *       200: { description: OK }
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MultimediaListResponse'
  *
  *   post:
  *     tags: [Multimedia]
  *     summary: Subir archivo multimedia (multipart)
+ *     description: |
+ *       Campo multipart obligatorio **archivo**. El segmento {id} es el ID del recurso
+ *       en el sistema que integra (productId, userId, etc.), no el id del cliente en MongoDB.
  *     security:
  *       - apiKeyAuth: []
  *     parameters:
- *       - in: path
- *         name: contexto
- *         required: true
- *         schema: { type: string }
- *       - in: path
- *         name: entidad
- *         required: true
- *         schema:
- *           type: string
- *           enum: [usuarios, productos, pedidos, sellers]
- *         description: "usuarios y sellers usan id UUID; productos y pedidos id numérico"
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *         description: "UUID si entidad es usuarios o sellers; numérico si productos o pedidos"
- *       - in: path
- *         name: tipo
- *         required: true
- *         schema: { type: string }
+ *       - $ref: '#/components/parameters/MultimediaContexto'
+ *       - $ref: '#/components/parameters/MultimediaEntidad'
+ *       - $ref: '#/components/parameters/MultimediaResourceId'
+ *       - $ref: '#/components/parameters/MultimediaTipo'
  *     requestBody:
  *       required: true
  *       content:
  *         multipart/form-data:
  *           schema:
  *             type: object
+ *             required: [archivo]
  *             properties:
- *               file:
+ *               archivo:
  *                 type: string
  *                 format: binary
+ *               visibilidad:
+ *                 type: string
+ *                 enum: [publico, privado, public]
  *     responses:
- *       200: { description: OK }
+ *       201:
+ *         description: Creado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MultimediaUploadResponse'
+ *       403: { description: Sin permiso write o fuera de prefijos }
  *
  * /v1/multimedia/{contexto}/{entidad}/{id}/{tipo}/{archivo}:
  *   delete:
@@ -122,32 +111,14 @@ const router = express.Router();
  *     security:
  *       - apiKeyAuth: []
  *     parameters:
- *       - in: path
- *         name: contexto
- *         required: true
- *         schema: { type: string }
- *       - in: path
- *         name: entidad
- *         required: true
- *         schema:
- *           type: string
- *           enum: [usuarios, productos, pedidos, sellers]
- *         description: "usuarios y sellers usan id UUID; productos y pedidos id numérico"
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *         description: "UUID si entidad es usuarios o sellers; numérico si productos o pedidos"
- *       - in: path
- *         name: tipo
- *         required: true
- *         schema: { type: string }
- *       - in: path
- *         name: archivo
- *         required: true
- *         schema: { type: string }
+ *       - $ref: '#/components/parameters/MultimediaContexto'
+ *       - $ref: '#/components/parameters/MultimediaEntidad'
+ *       - $ref: '#/components/parameters/MultimediaResourceId'
+ *       - $ref: '#/components/parameters/MultimediaTipo'
+ *       - $ref: '#/components/parameters/MultimediaArchivoNombre'
  *     responses:
  *       200: { description: OK }
+ *       403: { description: Sin permiso delete o fuera de prefijos }
  */
 router.get(
   '/acceso/:token',

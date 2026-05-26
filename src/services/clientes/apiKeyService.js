@@ -26,6 +26,21 @@ async function buscarPorClavePlana(plain) {
   return ApiKey.findOne({ hash, activo: true }).populate('cliente');
 }
 
+async function obtenerPorPublicId(clienteId, llaveParam) {
+  const valor = String(llaveParam || '').trim();
+  if (!valor) {
+    return null;
+  }
+  const filtroBase = { cliente: clienteId, activo: true };
+  if (mongoose.Types.ObjectId.isValid(valor)) {
+    const porId = await ApiKey.findOne({ ...filtroBase, _id: valor });
+    if (porId) {
+      return porId;
+    }
+  }
+  return ApiKey.findOne({ ...filtroBase, publicId: valor });
+}
+
 async function listarPorCliente(clienteId) {
   const docs = await ApiKey.find({ cliente: clienteId })
     .select('_id publicId nombre prefijos permisos activo ultimoUsoAt createdAt')
@@ -108,6 +123,7 @@ async function eliminarLlave(clienteId, llaveParam) {
 module.exports = {
   crearLlave,
   buscarPorClavePlana,
+  obtenerPorPublicId,
   listarPorCliente,
   marcarUso,
   actualizarEstado,

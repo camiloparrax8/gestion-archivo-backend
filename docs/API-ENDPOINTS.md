@@ -11,9 +11,12 @@
 |------|-----------|----------------|
 | **Ninguna** | — | Health, info de API, productos stub, y en modo legado (sin `MONGODB_URI`) multimedia puede no exigir clave. |
 | **Master key** | `X-Master-Key: <MASTER_API_KEY>` | Solo rutas **`/api/v1/admin/...`**: crear clientes y gestionar API keys (APK). No uses esta clave en el front público. |
-| **API key de cliente** | `X-API-Key: <clave>` o `Authorization: Bearer <clave>` | Rutas **`/api/v1/multimedia/...`** cuando hay MongoDB: listar, subir, borrar, pedir URL firmada. Cada cliente tiene una o más claves con permisos y alcance (`prefijos`). |
+| **API key de cliente** | `X-API-Key: <clave>` o `Authorization: Bearer <clave>` | Rutas **`/api/v1/multimedia/...`**: integraciones (Orion backend, scripts). La clave identifica al tenant; no envíe `clienteId`. |
+| **JWT (panel)** | `Authorization: Bearer <token>` | Rutas **`/api/v1/client/me/multimedia/...`** (rol cliente) y **`/api/v1/admin/clientes/:clienteId/multimedia/...`** (rol admin). **No** requiere API key para subir/explorar. |
 
-Variables de entorno: ver `.env.example` (`MASTER_API_KEY`, `MONGODB_URI`, `JWT_MEDIA_SECRET` con disco local, etc.).
+Variables de entorno: ver `.env.example` (`MASTER_API_KEY`, `MONGODB_URI`, `JWT_AUTH_SECRET`, `JWT_MEDIA_SECRET` con disco local, etc.).
+
+**Importante — segmento `{id}` en la URL:** es el **ID del recurso en la aplicación integradora** (productId, sellerId, userId de Orion), **no** el `_id` / `publicId` del documento Cliente en MongoDB de gestión de archivos (ese lo resuelve la API key o el JWT del panel).
 
 ---
 
@@ -180,7 +183,40 @@ Si la API key tiene `prefijos` no vacíos, la ruta `contexto/entidad/id/tipo` de
 
 ---
 
-## 6. Archivos estáticos `GET /media/...` (solo modo legado)
+## 6. Panel web — multimedia con JWT
+
+**Cuándo usar:** gestor de archivos (`gestion-archivo-front`), usuarios con login. No exponer API keys en el navegador.
+
+### Cliente (`rol: cliente`)
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/api/v1/client/me/multimedia/browse?prefix=` | Explorar carpetas/archivos |
+| `GET` | `/api/v1/client/me/multimedia/:contexto/:entidad/:id/:tipo` | Listar carpeta |
+| `POST` | `/api/v1/client/me/multimedia/:contexto/:entidad/:id/:tipo` | Subir (`multipart`, campo **`archivo`**) |
+| `DELETE` | `/api/v1/client/me/multimedia/.../:archivo` | Eliminar |
+| `POST` | `/api/v1/client/me/multimedia/url-firma` | URL temporal por `rutaInternaCliente` |
+
+### Admin (`rol: admin`)
+
+Mismas operaciones bajo `/api/v1/admin/clientes/:clienteId/multimedia/...` (incluye `browse`, `url-firma`, subir y borrar).
+
+### Diferencias respecto a API key
+
+| | API key (`/multimedia/...`) | Panel JWT (`/me/multimedia/...`) |
+|--|---------------------------|----------------------------------|
+| Auth | `X-API-Key` | `Bearer` JWT |
+| Tenant | De la API key | Del usuario logueado (o `:clienteId` si admin) |
+| Prefijos de llave | Obligatorios si la llave los define | **No** obligatorios al subir (panel libre) |
+| Header opcional | — | `X-Llave-Id` solo para filtrar browse con una llave concreta |
+
+### Respuesta explore / listado (archivos)
+
+Items `kind: file` incluyen: `rutaInternaCliente`, `rutaRelativa`, `nombreOriginal`, `mime`, `tamaño`, `url`, `visibilidad`, `accesoPrivado`.
+
+---
+
+## 7. Archivos estáticos `GET /media/...` (solo modo legado)
 
 **Importante:** en disco los binarios están bajo la carpeta física **`storage/`** (por defecto) o la ruta de `STORAGE_DIR`. El prefijo HTTP **`/media`** no es una carpeta del proyecto: es la ruta con la que Express sirve el contenido de `storageDir`.
 
@@ -191,7 +227,7 @@ Si la API key tiene `prefijos` no vacíos, la ruta `contexto/entidad/id/tipo` de
 
 ---
 
-## 7. Resumen: qué endpoint usar en cada momento
+## 8. Resumen: qué endpoint usar en cada momento
 
 | Objetivo | Endpoint |
 |----------|----------|
@@ -199,29 +235,32 @@ Si la API key tiene `prefijos` no vacíos, la ruta `contexto/entidad/id/tipo` de
 | Crear cuenta cliente en el servicio de archivos | `POST /api/v1/admin/clientes` + Master key |
 | Generar una APK para integradores | `POST /api/v1/admin/clientes/:id/llaves` + Master key |
 | Ver llaves existentes (sin ver el secreto) | `GET /api/v1/admin/clientes/:id/llaves` + Master key |
-| Listar archivos de una carpeta lógica | `GET /api/v1/multimedia/...` + API key |
-| Subir imagen o PDF | `POST /api/v1/multimedia/...` + API key + multipart `archivo` |
-| Borrar un archivo | `DELETE /api/v1/multimedia/.../:archivo` + API key |
-| Obtener enlace temporal para ver/descargar | `POST /api/v1/multimedia/url-firma` + API key, luego abrir `data.url` |
-| Abrir archivo con token (local + Mongo) | `GET /api/v1/multimedia/acceso/:token` (sin API key) |
+| Listar archivos (integración) | `GET /api/v1/multimedia/...` + API key |
+| Subir (integración) | `POST /api/v1/multimedia/...` + API key + `archivo` |
+| Explorar / subir desde el gestor web | JWT → `/api/v1/client/me/multimedia/...` (sin API key) |
+| Admin explora un cliente | JWT admin → `/api/v1/admin/clientes/:id/multimedia/browse` |
+| Borrar un archivo | `DELETE` en la ruta correspondiente (API key o JWT) |
+| Enlace temporal | `POST .../url-firma` (API key o JWT panel) |
+| Abrir archivo con token (local + Mongo) | `GET /api/v1/multimedia/acceso/:token` (sin auth) |
 
 ---
 
-## 8. Auditoría en MongoDB (con `MONGODB_URI`)
+## 9. Auditoría en MongoDB (con `MONGODB_URI`)
 
 Los eventos se persisten en la colección **`auditoriaeventos`** con caducidad automática (TTL según `AUDITORIA_TTL_DIAS`).
 
 | Campo `origen` | Acciones (`accion`) |
 |-----------------|---------------------|
 | `master` | `admin.cliente_crear`, `admin.api_key_crear`, `admin.api_key_listar` |
-| `api_key` | `multimedia.listar`, `multimedia.subir`, `multimedia.eliminar`, `multimedia.url_firma` |
+| `api_key` | `multimedia.listar`, `multimedia.subir`, `multimedia.eliminar`, `multimedia.url_firma`, `multimedia.explorar` |
+| `panel_jwt` | Mismas acciones multimedia desde el panel (sin `apiKeyId` obligatorio) |
 | `acceso_token` | `multimedia.acceso_archivo` (descarga vía `GET .../multimedia/acceso/:token`) |
 
 Los registros antiguos pueden no incluir `origen`. No se guardan secretos (ni master key ni API key en claro).
 
 ---
 
-## 9. Códigos de error frecuentes
+## 10. Códigos de error frecuentes
 
 | Código | Situación típica |
 |--------|------------------|

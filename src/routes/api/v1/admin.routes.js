@@ -3,6 +3,23 @@ const asyncHandler = require('../../../utils/asyncHandler');
 const autenticarJwt = require('../../../middleware/autenticarJwt');
 const requerirRol = require('../../../middleware/requerirRol');
 const clienteAdminController = require('../../../controllers/clienteAdminController');
+const multimediaController = require('../../../controllers/multimediaController');
+const validarParametrosMultimedia = require('../../../middleware/validarParametrosMultimedia');
+const requerirPermiso = require('../../../middleware/requerirPermiso');
+const {
+  validarAlcanceMultimedia,
+  validarAlcanceBrowse,
+} = require('../../../middleware/validarAlcanceMultimedia');
+const {
+  validarAlcanceMultimediaPanel,
+  validarAlcanceBrowsePanel,
+  validarAlcanceUrlFirmaPanel,
+} = require('../../../middleware/validarAlcancePanelJwt');
+const {
+  prepararAuthMultimediaAdmin,
+  adjuntarLlavePanelOpcional,
+} = require('../../../middleware/prepararAuthMultimediaPanel');
+const { subirUnArchivo } = require('../../../middleware/multerMultimedia');
 
 const router = express.Router();
 
@@ -252,6 +269,56 @@ router.post(
   '/clientes/:clienteId/llaves/:llaveId/rotar',
   express.json(),
   asyncHandler(clienteAdminController.rotarLlave),
+);
+
+router.post(
+  '/clientes/:clienteId/multimedia/url-firma',
+  prepararAuthMultimediaAdmin,
+  adjuntarLlavePanelOpcional,
+  validarAlcanceUrlFirmaPanel,
+  requerirPermiso('read'),
+  express.json(),
+  asyncHandler(multimediaController.solicitarUrlFirma),
+);
+
+router.get(
+  '/clientes/:clienteId/multimedia/browse',
+  prepararAuthMultimediaAdmin,
+  adjuntarLlavePanelOpcional,
+  validarAlcanceBrowse,
+  validarAlcanceBrowsePanel,
+  asyncHandler(multimediaController.explorar),
+);
+
+router.get(
+  '/clientes/:clienteId/multimedia/:contexto/:entidad/:id/:tipo',
+  prepararAuthMultimediaAdmin,
+  adjuntarLlavePanelOpcional,
+  validarParametrosMultimedia,
+  asyncHandler(multimediaController.listar),
+);
+
+router.post(
+  '/clientes/:clienteId/multimedia/:contexto/:entidad/:id/:tipo',
+  prepararAuthMultimediaAdmin,
+  adjuntarLlavePanelOpcional,
+  requerirPermiso('write'),
+  validarAlcanceMultimedia,
+  validarAlcanceMultimediaPanel,
+  validarParametrosMultimedia,
+  subirUnArchivo,
+  asyncHandler(multimediaController.subir),
+);
+
+router.delete(
+  '/clientes/:clienteId/multimedia/:contexto/:entidad/:id/:tipo/:archivo',
+  prepararAuthMultimediaAdmin,
+  adjuntarLlavePanelOpcional,
+  requerirPermiso('delete'),
+  validarAlcanceMultimedia,
+  validarAlcanceMultimediaPanel,
+  validarParametrosMultimedia,
+  asyncHandler(multimediaController.eliminar),
 );
 
 module.exports = router;
