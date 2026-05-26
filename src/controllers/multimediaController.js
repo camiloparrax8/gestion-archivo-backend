@@ -170,7 +170,8 @@ async function solicitarUrlFirma(req, res) {
 async function explorar(req, res) {
   const prefix = String(req.query.prefix || '').trim();
   const cid = clienteIdParaRutas(req);
-  const exploracion = await multimediaService.explorar(cid, prefix);
+  const apiKeyId = req.auth?.apiKeyDoc?._id ?? null;
+  const exploracion = await multimediaService.explorar(cid, prefix, { apiKeyId });
   const data = await multimediaService.enriquecerExploracion(req, exploracion, cid);
   await auditoriaService.registrar({
     clienteId: req.auth?.cliente?._id,

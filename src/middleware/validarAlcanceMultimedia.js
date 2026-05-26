@@ -60,7 +60,7 @@ function validarAlcanceMultimedia(req, res, next) {
   /**
    * La API key identifica al tenant (cliente en MongoDB).
    * contexto/entidad/id/tipo son libres: si la carpeta no existe, se crea al subir.
-   * Los prefijos de la llave solo filtran el explorador (browse), no bloquean rutas aquí.
+   * El browse del panel filtra por la API key usada en la subida (query llaveId), no por prefijos de ruta.
    */
   return next();
 }

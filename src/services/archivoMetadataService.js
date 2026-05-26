@@ -52,7 +52,7 @@ async function mapaMetadata(clienteId, rutasCliente) {
     cliente: clienteId,
     rutaRelativa: { $in: rutasCliente },
   })
-    .select('rutaRelativa visibilidad nombreOriginal mime tamaño')
+    .select('rutaRelativa visibilidad nombreOriginal mime tamaño apiKey')
     .lean();
   return new Map(
     docs.map((d) => [
@@ -62,6 +62,7 @@ async function mapaMetadata(clienteId, rutasCliente) {
         nombreOriginal: d.nombreOriginal,
         mime: d.mime,
         tamaño: d.tamaño,
+        apiKeyId: d.apiKey ? String(d.apiKey) : null,
       },
     ]),
   );
@@ -79,15 +80,21 @@ function normalizarPrefijoLogico(prefijoLogico) {
  * Hijos inmediatos (carpetas y archivos) inferidos de metadatos MongoDB.
  * Cubre rutas 5 o 6 segmentos (…/tipo/archivo o …/tipo/pdf/archivo).
  */
-async function listarHijosDesdeMetadata(clienteId, prefijoLogico) {
+async function listarHijosDesdeMetadata(clienteId, prefijoLogico, opciones = {}) {
   const limpio = normalizarPrefijoLogico(prefijoLogico);
   const filtro = { cliente: clienteId };
   if (limpio) {
     filtro.rutaRelativa = new RegExp(`^${limpio.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`);
   }
+  const apiKeyId = opciones.apiKeyId;
+  if (apiKeyId) {
+    filtro.apiKey = apiKeyId;
+  }
 
   const docs = await Archivo.find(filtro)
-    .select('rutaRelativa nombre nombreOriginal mime tamaño visibilidad updatedAt createdAt')
+    .select(
+      'rutaRelativa nombre nombreOriginal mime tamaño visibilidad apiKey updatedAt createdAt',
+    )
     .lean();
 
   const carpetas = new Map();
@@ -112,6 +119,7 @@ async function listarHijosDesdeMetadata(clienteId, prefijoLogico) {
         modificadoEn: (doc.updatedAt || doc.createdAt)?.toISOString?.() || null,
         mime: doc.mime,
         nombreOriginal: doc.nombreOriginal,
+        apiKeyId: doc.apiKey ? String(doc.apiKey) : null,
       });
       continue;
     }
