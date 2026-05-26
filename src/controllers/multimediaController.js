@@ -167,6 +167,26 @@ async function solicitarUrlFirma(req, res) {
   res.json({ data: resultado });
 }
 
+async function eliminarCarpeta(req, res) {
+  const prefix = String(req.query.prefix || '').trim();
+  if (!prefix) {
+    throw new AppError('Query prefix requerido (carpeta a eliminar)', 400);
+  }
+  const cid = clienteIdParaRutas(req);
+  const resultado = await multimediaService.eliminarPrefijo(cid, prefix);
+  await auditoriaService.registrar({
+    clienteId: req.auth?.cliente?._id,
+    apiKeyId: req.auth?.apiKeyDoc?._id,
+    origen: origenAuditoria(req),
+    accion: 'multimedia.eliminar_carpeta',
+    metodo: req.method,
+    ruta: req.originalUrl,
+    statusCode: 200,
+    detalle: resultado,
+  });
+  res.json({ data: resultado });
+}
+
 async function explorar(req, res) {
   const prefix = String(req.query.prefix || '').trim();
   const cid = clienteIdParaRutas(req);
@@ -230,6 +250,7 @@ module.exports = {
   listar,
   subir,
   eliminar,
+  eliminarCarpeta,
   solicitarUrlFirma,
   explorar,
   accesoLocalPorToken,

@@ -143,6 +143,14 @@ router.get(
   asyncHandler(multimediaController.explorar),
 );
 
+router.delete(
+  '/me/multimedia/browse',
+  prepararAuthMultimediaCliente,
+  requerirPermiso('delete'),
+  validarAlcanceBrowsePanel,
+  asyncHandler(multimediaController.eliminarCarpeta),
+);
+
 router.get(
   '/me/multimedia/:contexto/:entidad/:id/:tipo',
   prepararAuthMultimediaCliente,
