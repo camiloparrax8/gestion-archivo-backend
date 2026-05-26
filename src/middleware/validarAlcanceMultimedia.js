@@ -6,7 +6,14 @@ function alcanzaPrefijos(rutaLogica, prefijos) {
   if (!prefs.length) {
     return true;
   }
-  return prefs.some((p) => rutaLogica === p || rutaLogica.startsWith(`${p}/`));
+  const ruta = String(rutaLogica || '').replace(/^\/+|\/+$/g, '');
+  return prefs.some((p) => {
+    const pref = String(p || '').replace(/^\/+|\/+$/g, '');
+    if (!pref) {
+      return true;
+    }
+    return ruta === pref || ruta.startsWith(`${pref}/`) || pref.startsWith(`${ruta}/`);
+  });
 }
 
 function itemVisibleEnPrefijos(itemPath, prefijos) {
@@ -27,6 +34,10 @@ function validarAlcanceMultimedia(req, res, next) {
   if (!config.mongodbUri || req.auth?.legacy || !req.auth?.apiKeyDoc) {
     return next();
   }
+  /** Panel JWT: la llave es filtro opcional; la subida crea carpetas bajo el tenant. */
+  if (req.auth?.panelJwt) {
+    return next();
+  }
   const { contexto, entidad, id, tipo } = req.params;
   const rutaLogica = `${contexto}/${entidad}/${id}/${tipo}`;
   const prefs = req.auth.apiKeyDoc.prefijos || [];
@@ -38,6 +49,9 @@ function validarAlcanceMultimedia(req, res, next) {
 
 function validarAlcanceBrowse(req, res, next) {
   if (!config.mongodbUri || req.auth?.legacy || !req.auth?.apiKeyDoc) {
+    return next();
+  }
+  if (req.auth?.panelJwt) {
     return next();
   }
   const prefix = String(req.query.prefix || '').replace(/^\/+|\/+$/g, '');
