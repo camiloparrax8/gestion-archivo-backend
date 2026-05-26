@@ -572,6 +572,21 @@ function directorioAbsolutoDesdePrefijo(clienteId, prefijoLogico) {
   return abs;
 }
 
+function fusionarExploracionConMetadata(exploracionFs, exploracionMeta) {
+  const folders = new Map();
+  for (const f of [...(exploracionFs.folders || []), ...(exploracionMeta.folders || [])]) {
+    folders.set(f.path, f);
+  }
+  const files = new Map();
+  for (const f of [...(exploracionFs.files || []), ...(exploracionMeta.files || [])]) {
+    const key = f.rutaInternaCliente || f.path;
+    files.set(key, f);
+  }
+  const foldersArr = [...folders.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const filesArr = [...files.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return { folders: foldersArr, files: filesArr };
+}
+
 async function explorarLocal(clienteId, prefijoLogico) {
   const limpio = validarPrefijoBrowse(prefijoLogico);
   const abs = directorioAbsolutoDesdePrefijo(clienteId, limpio);
@@ -580,10 +595,9 @@ async function explorarLocal(clienteId, prefijoLogico) {
   try {
     entradas = await fs.readdir(abs, { withFileTypes: true });
   } catch (err) {
-    if (err.code === 'ENOENT') {
-      return { prefix: limpio, contexto: contextoDesdePrefijo(limpio), folders: [], files: [] };
+    if (err.code !== 'ENOENT') {
+      throw err;
     }
-    throw err;
   }
 
   const folders = [];
@@ -613,14 +627,17 @@ async function explorarLocal(clienteId, prefijoLogico) {
     }
   }
 
-  folders.sort((a, b) => a.name.localeCompare(b.name));
-  files.sort((a, b) => a.name.localeCompare(b.name));
+  let fusion = { folders, files };
+  if (usaMongoAuth() && clienteId) {
+    const meta = await archivoMetadataService.listarHijosDesdeMetadata(clienteId, limpio);
+    fusion = fusionarExploracionConMetadata(fusion, meta);
+  }
 
   return {
     prefix: limpio,
     contexto: contextoDesdePrefijo(limpio),
-    folders,
-    files,
+    folders: fusion.folders,
+    files: fusion.files,
   };
 }
 
@@ -661,14 +678,17 @@ async function explorarS3(clienteId, prefijoLogico) {
     };
   });
 
-  folders.sort((a, b) => a.name.localeCompare(b.name));
-  files.sort((a, b) => a.name.localeCompare(b.name));
+  let fusion = { folders, files };
+  if (usaMongoAuth() && clienteId) {
+    const meta = await archivoMetadataService.listarHijosDesdeMetadata(clienteId, limpio);
+    fusion = fusionarExploracionConMetadata(fusion, meta);
+  }
 
   return {
     prefix: limpio,
     contexto: contextoDesdePrefijo(limpio),
-    folders,
-    files,
+    folders: fusion.folders,
+    files: fusion.files,
   };
 }
 
@@ -711,7 +731,7 @@ async function enriquecerExploracion(req, exploracion, clienteId) {
 
   const fileItems = enriquecidos.map((f) => ({
     kind: 'file',
-    name: f.nombre,
+    name: f.nombreOriginal || f.nombre,
     path: f.rutaInternaCliente,
     folder: f.rutaInternaCliente,
     rutaInternaCliente: f.rutaInternaCliente,
