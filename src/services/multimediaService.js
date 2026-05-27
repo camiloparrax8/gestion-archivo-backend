@@ -266,11 +266,47 @@ async function listarArchivosS3(clienteId, contexto, entidad, id, tipo) {
   return resultado;
 }
 
-async function listarArchivos(clienteId, contexto, entidad, id, tipo) {
-  if (esAlmacenamientoS3()) {
-    return listarArchivosS3(clienteId, contexto, entidad, id, tipo);
+async function fusionarListadoConMetadata(clienteId, contexto, entidad, id, tipo, items) {
+  if (!usaMongoAuth() || !clienteId) {
+    return items;
   }
-  return listarArchivosLocal(clienteId, contexto, entidad, id, tipo);
+  const metaItems = await archivoMetadataService.listarArchivosEnCarpeta(
+    clienteId,
+    contexto,
+    entidad,
+    id,
+    tipo,
+  );
+  const byRuta = new Map(items.map((item) => [item.rutaInternaCliente, item]));
+  for (const meta of metaItems) {
+    if (byRuta.has(meta.rutaInternaCliente)) {
+      continue;
+    }
+    const existe = await existeArchivoEnAlmacenamiento(clienteId, meta.rutaInternaCliente);
+    if (!existe) {
+      continue;
+    }
+    byRuta.set(meta.rutaInternaCliente, {
+      nombre: meta.nombre,
+      rutaRelativa: resolverRutaAlmacenamientoDesdeInterna(clienteId, meta.rutaInternaCliente),
+      rutaInternaCliente: meta.rutaInternaCliente,
+      ...(meta.subcarpeta ? { subcarpeta: meta.subcarpeta } : {}),
+      tamaño: meta.tamaño,
+      modificadoEn: meta.modificadoEn,
+      mime: meta.mime,
+    });
+  }
+  return [...byRuta.values()];
+}
+
+async function listarArchivos(clienteId, contexto, entidad, id, tipo) {
+  let items;
+  if (esAlmacenamientoS3()) {
+    items = await listarArchivosS3(clienteId, contexto, entidad, id, tipo);
+  } else {
+    items = await listarArchivosLocal(clienteId, contexto, entidad, id, tipo);
+  }
+  return fusionarListadoConMetadata(clienteId, contexto, entidad, id, tipo, items);
 }
 
 function validarNombreArchivoSeguro(nombreArchivo) {

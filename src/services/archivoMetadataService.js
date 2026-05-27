@@ -94,6 +94,48 @@ async function obtenerPublicoPorPublicId(publicId) {
     .lean();
 }
 
+const SUBCARPETAS_ARCHIVO = new Set(['pdf', 'jpeg', 'png', 'gif', 'webp']);
+
+/**
+ * Archivos bajo una carpeta lógica exacta (…/contexto/entidad/id/tipo), incluyendo subcarpetas MIME.
+ */
+async function listarArchivosEnCarpeta(clienteId, contexto, entidad, id, tipo) {
+  const prefijo = normalizarPrefijoLogico(`${contexto}/${entidad}/${id}/${tipo}`);
+  if (!clienteId || !prefijo) {
+    return [];
+  }
+  const escaped = prefijo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const docs = await Archivo.find({
+    cliente: clienteId,
+    rutaRelativa: new RegExp(`^${escaped}/`),
+  })
+    .select('rutaRelativa nombre nombreOriginal mime tamaño updatedAt createdAt')
+    .lean();
+
+  const archivos = [];
+  for (const doc of docs) {
+    const rel = normalizarPrefijoLogico(doc.rutaRelativa);
+    const rest = rel.slice(prefijo.length + 1);
+    const partes = rest.split('/').filter(Boolean);
+    if (partes.length !== 1 && partes.length !== 2) {
+      continue;
+    }
+    if (partes.length === 2 && !SUBCARPETAS_ARCHIVO.has(partes[0])) {
+      continue;
+    }
+    archivos.push({
+      nombre: doc.nombre || partes[partes.length - 1],
+      nombreOriginal: doc.nombreOriginal,
+      rutaInternaCliente: rel,
+      subcarpeta: partes.length === 2 ? partes[0] : undefined,
+      tamaño: doc.tamaño,
+      modificadoEn: (doc.updatedAt || doc.createdAt)?.toISOString?.() || null,
+      mime: doc.mime,
+    });
+  }
+  return archivos;
+}
+
 async function obtenerPorRuta(clienteId, rutaRelativaCliente) {
   return Archivo.findOne({ cliente: clienteId, rutaRelativa: rutaRelativaCliente }).lean();
 }
@@ -223,6 +265,7 @@ module.exports = {
   mapaVisibilidad,
   mapaMetadata,
   obtenerPublicoPorPublicId,
+  listarArchivosEnCarpeta,
   obtenerPorRuta,
   listarHijosDesdeMetadata,
   rutasRelativasParaLlave,
