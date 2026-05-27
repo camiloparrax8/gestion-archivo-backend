@@ -64,6 +64,11 @@ function esArchivoExcel(nombreArchivo) {
   return ext === '.xls' || ext === '.xlsx' || ext === '.xlsm';
 }
 
+function esArchivoWord(nombreArchivo) {
+  const ext = path.extname(String(nombreArchivo || '')).toLowerCase();
+  return ext === '.doc' || ext === '.docx';
+}
+
 async function listar(req, res) {
   const { contexto, entidad, id, tipo } = req.params;
   const cid = clienteIdParaRutas(req);
@@ -231,7 +236,7 @@ async function accesoLocalPorToken(req, res, next) {
       ? new mongoose.Types.ObjectId(payload.cid)
       : undefined;
     const nombreArchivo = path.basename(String(payload.rel));
-    const esExcel = esArchivoExcel(nombreArchivo);
+    const forzarDescarga = esArchivoExcel(nombreArchivo) || esArchivoWord(nombreArchivo);
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     const terminarRespuesta = (err) => {
       if (err) return next(err);
@@ -245,7 +250,7 @@ async function accesoLocalPorToken(req, res, next) {
         detalle: { rutaInternaCliente: payload.rel },
       });
     };
-    if (esExcel) {
+    if (forzarDescarga) {
       res.download(path.resolve(abs), nombreArchivo, terminarRespuesta);
     } else {
       res.sendFile(path.resolve(abs), terminarRespuesta);
