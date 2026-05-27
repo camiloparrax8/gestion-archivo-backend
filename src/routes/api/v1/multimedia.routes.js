@@ -11,6 +11,21 @@ const router = express.Router();
 
 /**
  * @openapi
+ * /v1/multimedia/publico/{publicId}:
+ *   get:
+ *     tags: [Multimedia]
+ *     summary: Lectura pública estable por publicId (visibilidad publico)
+ *     description: Sin API key. Solo archivos marcados como publico en MongoDB.
+ *     parameters:
+ *       - in: path
+ *         name: publicId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Stream del archivo }
+ *       302: { description: Redirección a URL pública S3 }
+ *       404: { description: No encontrado o no público }
+ *
  * /v1/multimedia/acceso/{token}:
  *   get:
  *     tags: [Multimedia]
@@ -120,6 +135,11 @@ const router = express.Router();
  *       200: { description: OK }
  *       403: { description: Sin permiso delete o fuera de prefijos }
  */
+router.get(
+  '/publico/:publicId',
+  asyncHandler(multimediaController.accesoPublicoPorPublicId),
+);
+
 router.get(
   '/acceso/:token',
   asyncHandler(multimediaController.accesoLocalPorToken),

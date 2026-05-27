@@ -465,7 +465,7 @@ async function procesarSubida(req) {
         req.body?.visibilidad === 'publico' || req.body?.visibilidad === 'public'
           ? 'publico'
           : 'privado';
-      await archivoMetadataService.upsertTrasSubida({
+      const metaDoc = await archivoMetadataService.upsertTrasSubida({
         clienteId: req.auth.cliente._id,
         apiKeyId: req.auth.apiKeyDoc?._id,
         rutaRelativaCliente: data.rutaInternaCliente,
@@ -475,6 +475,14 @@ async function procesarSubida(req) {
         tamaño: data.tamaño,
         visibilidad: vis,
       });
+      if (metaDoc?.publicId) {
+        data.publicId = metaDoc.publicId;
+      }
+      if (vis === 'privado') {
+        data.url = await s3
+          .urlFirmaLectura(s3.claveCompleta(data.rutaRelativa), config.signedUrlExpiresSeconds)
+          .catch(() => data.url);
+      }
     }
     return data;
   }
@@ -499,7 +507,7 @@ async function procesarSubida(req) {
       req.body?.visibilidad === 'publico' || req.body?.visibilidad === 'public'
         ? 'publico'
         : 'privado';
-    await archivoMetadataService.upsertTrasSubida({
+    const metaDoc = await archivoMetadataService.upsertTrasSubida({
       clienteId: req.auth.cliente._id,
       apiKeyId: req.auth.apiKeyDoc?._id,
       rutaRelativaCliente: rutaInterna,
@@ -509,9 +517,18 @@ async function procesarSubida(req) {
       tamaño: file.size,
       visibilidad: vis,
     });
-    const accesoUrl = urlAccesoLocalTrasSubidaMongo(req, req.auth.cliente._id, rutaInterna, vis);
+    const accesoUrl = urlAccesoLocalTrasSubidaMongo(
+      req,
+      req.auth.cliente._id,
+      rutaInterna,
+      vis,
+      metaDoc?.publicId,
+    );
     if (accesoUrl) {
       data.url = accesoUrl;
+    }
+    if (metaDoc?.publicId) {
+      data.publicId = metaDoc.publicId;
     }
   }
   return data;
@@ -539,19 +556,34 @@ function baseUrlPeticion(req) {
   return `${req.protocol}://${req.get('host')}`;
 }
 
+/** URL estable de lectura para archivos con visibilidad pública (Mongo + local). */
+function construirUrlPublicaPorPublicId(req, publicId) {
+  const id = encodeURIComponent(String(publicId || '').trim());
+  return `${baseUrlPeticion(req)}/api/v1/multimedia/publico/${id}`;
+}
+
 /**
  * URL de lectura para un archivo recién subido (Mongo + disco local): token /acceso/
  * (misma idea que enriquecerListadoConUrls para items sin URL pública).
  */
-function urlAccesoLocalTrasSubidaMongo(req, clienteId, rutaInternaCliente, visibilidad) {
+function urlAccesoLocalTrasSubidaMongo(
+  req,
+  clienteId,
+  rutaInternaCliente,
+  visibilidad,
+  publicId,
+) {
   if (!usaMongoAuth() || !clienteId || esAlmacenamientoS3()) {
     return null;
   }
-  const multimediaAccesoLocal = require('./multimediaAccesoLocal');
   const vis = visibilidad === 'publico' || visibilidad === 'public' ? 'publico' : 'privado';
+  if (vis === 'publico' && publicId) {
+    return construirUrlPublicaPorPublicId(req, publicId);
+  }
+  const multimediaAccesoLocal = require('./multimediaAccesoLocal');
   const token = multimediaAccesoLocal.firmarToken(
     { clienteId: String(clienteId), rutaRelativaCliente: rutaInternaCliente },
-    vis === 'privado' ? config.signedUrlExpiresSeconds : config.signedUrlExpiresSeconds * 4,
+    config.signedUrlExpiresSeconds,
   );
   return `${baseUrlPeticion(req)}/api/v1/multimedia/acceso/${token}`;
 }
@@ -567,7 +599,7 @@ async function enriquecerListadoConUrls(req, items, clienteId) {
   const out = [];
   for (const item of items) {
     const meta = metaMap.get(item.rutaInternaCliente) || null;
-    const vis = meta?.visibilidad || 'publico';
+    const vis = meta?.visibilidad || 'privado';
     const nombreOriginal = meta?.nombreOriginal || item.nombre;
     const mime =
       meta?.mime ||
@@ -580,11 +612,15 @@ async function enriquecerListadoConUrls(req, items, clienteId) {
     if (usaMongoAuth() && clienteId) {
       accesoPrivado = vis === 'privado';
       if (!esAlmacenamientoS3()) {
-        const token = multimediaAccesoLocal.firmarToken(
-          { clienteId, rutaRelativaCliente: item.rutaInternaCliente },
-          vis === 'privado' ? config.signedUrlExpiresSeconds : config.signedUrlExpiresSeconds * 4,
-        );
-        urlFinal = `${base}/api/v1/multimedia/acceso/${token}`;
+        if (vis === 'publico' && meta?.publicId) {
+          urlFinal = construirUrlPublicaPorPublicId(req, meta.publicId);
+        } else {
+          const token = multimediaAccesoLocal.firmarToken(
+            { clienteId, rutaRelativaCliente: item.rutaInternaCliente },
+            config.signedUrlExpiresSeconds,
+          );
+          urlFinal = `${base}/api/v1/multimedia/acceso/${token}`;
+        }
       } else if (vis === 'privado') {
         urlFinal = await s3.urlFirmaLectura(
           s3.claveCompleta(item.rutaRelativa),
@@ -607,6 +643,7 @@ async function enriquecerListadoConUrls(req, items, clienteId) {
       tamaño,
       modificadoEn: item.modificadoEn,
       visibilidad: usaMongoAuth() && clienteId ? vis : undefined,
+      ...(meta?.publicId ? { publicId: meta.publicId } : {}),
       url: urlFinal,
       accesoPrivado,
       apiKeyId: meta?.apiKeyId || item.apiKeyId || null,
@@ -1007,6 +1044,7 @@ module.exports = {
   conPrefijoCliente,
   existeArchivoEnAlmacenamiento,
   baseUrlPeticion,
+  construirUrlPublicaPorPublicId,
   explorar,
   enriquecerExploracion,
   contextoDesdePrefijo,
