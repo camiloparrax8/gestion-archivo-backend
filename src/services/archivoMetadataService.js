@@ -66,7 +66,7 @@ async function mapaMetadata(clienteId, rutasCliente) {
     cliente: clienteId,
     rutaRelativa: { $in: rutasCliente },
   })
-    .select('rutaRelativa visibilidad nombreOriginal mime tamaño apiKey')
+    .select('rutaRelativa visibilidad nombreOriginal mime tamaño apiKey publicId')
     .lean();
   return new Map(
     docs.map((d) => [
@@ -77,9 +77,21 @@ async function mapaMetadata(clienteId, rutasCliente) {
         mime: d.mime,
         tamaño: d.tamaño,
         apiKeyId: d.apiKey ? String(d.apiKey) : null,
+        publicId: d.publicId || null,
       },
     ]),
   );
+}
+
+/** Archivo marcado como público, resoluble por publicId (sin API key). */
+async function obtenerPublicoPorPublicId(publicId) {
+  const id = String(publicId || '').trim();
+  if (!id) {
+    return null;
+  }
+  return Archivo.findOne({ publicId: id, visibilidad: 'publico' })
+    .select('cliente rutaRelativa nombre nombreOriginal mime')
+    .lean();
 }
 
 async function obtenerPorRuta(clienteId, rutaRelativaCliente) {
@@ -210,6 +222,7 @@ module.exports = {
   eliminarPorPrefijo,
   mapaVisibilidad,
   mapaMetadata,
+  obtenerPublicoPorPublicId,
   obtenerPorRuta,
   listarHijosDesdeMetadata,
   rutasRelativasParaLlave,

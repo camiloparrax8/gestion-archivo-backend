@@ -69,6 +69,32 @@ function esArchivoWord(nombreArchivo) {
   return ext === '.doc' || ext === '.docx';
 }
 
+const PUBLIC_ID_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function entregarArchivoLocal(req, res, next, opciones) {
+  const { abs, nombreArchivo, clienteOid, origen, detalle } = opciones;
+  const forzarDescarga = esArchivoExcel(nombreArchivo) || esArchivoWord(nombreArchivo);
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  const terminarRespuesta = (err) => {
+    if (err) return next(err);
+    void auditoriaService.registrar({
+      clienteId: clienteOid,
+      accion: 'multimedia.acceso_archivo',
+      metodo: req.method,
+      ruta: req.originalUrl,
+      statusCode: 200,
+      origen,
+      detalle,
+    });
+  };
+  if (forzarDescarga) {
+    res.download(path.resolve(abs), nombreArchivo, terminarRespuesta);
+  } else {
+    res.sendFile(path.resolve(abs), terminarRespuesta);
+  }
+}
+
 async function listar(req, res) {
   const { contexto, entidad, id, tipo } = req.params;
   const cid = clienteIdParaRutas(req);
@@ -236,29 +262,76 @@ async function accesoLocalPorToken(req, res, next) {
       ? new mongoose.Types.ObjectId(payload.cid)
       : undefined;
     const nombreArchivo = path.basename(String(payload.rel));
-    const forzarDescarga = esArchivoExcel(nombreArchivo) || esArchivoWord(nombreArchivo);
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    const terminarRespuesta = (err) => {
-      if (err) return next(err);
-      void auditoriaService.registrar({
-        clienteId: clienteOid,
-        accion: 'multimedia.acceso_archivo',
-        metodo: req.method,
-        ruta: req.originalUrl,
-        statusCode: 200,
-        origen: 'acceso_token',
-        detalle: { rutaInternaCliente: payload.rel },
-      });
-    };
-    if (forzarDescarga) {
-      res.download(path.resolve(abs), nombreArchivo, terminarRespuesta);
-    } else {
-      res.sendFile(path.resolve(abs), terminarRespuesta);
-    }
+    entregarArchivoLocal(req, res, next, {
+      abs,
+      nombreArchivo,
+      clienteOid,
+      origen: 'acceso_token',
+      detalle: { rutaInternaCliente: payload.rel },
+    });
   } catch (err) {
     if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
       return next(new AppError('Enlace inválido o expirado', 401));
     }
+    next(err);
+  }
+}
+
+async function accesoPublicoPorPublicId(req, res, next) {
+  try {
+    if (!config.mongodbUri) {
+      throw new AppError('No disponible', 404);
+    }
+    const publicId = String(req.params.publicId || '').trim();
+    if (!PUBLIC_ID_UUID_RE.test(publicId)) {
+      throw new AppError('Archivo no encontrado', 404);
+    }
+
+    const doc = await archivoMetadataService.obtenerPublicoPorPublicId(publicId);
+    if (!doc) {
+      throw new AppError('Archivo no encontrado', 404);
+    }
+
+    const clienteId = String(doc.cliente);
+    const existe = await multimediaService.existeArchivoEnAlmacenamiento(
+      clienteId,
+      doc.rutaRelativa,
+    );
+    if (!existe) {
+      throw new AppError('Archivo no encontrado', 404);
+    }
+
+    const clienteOid = mongoose.Types.ObjectId.isValid(clienteId)
+      ? new mongoose.Types.ObjectId(clienteId)
+      : undefined;
+
+    if (multimediaService.esAlmacenamientoS3()) {
+      const relStorage = multimediaService.resolverRutaAlmacenamientoDesdeInterna(
+        clienteId,
+        doc.rutaRelativa,
+      );
+      const url = multimediaService.construirUrlPublicaMedia(req, relStorage);
+      res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+      return res.redirect(302, url);
+    }
+
+    const rel = multimediaService.conPrefijoCliente(clienteId, doc.rutaRelativa);
+    const abs = path.join(path.resolve(config.storageDir), ...rel.split('/'));
+    multimediaService.asegurarDentroDeUploads(abs);
+    if (!fs.existsSync(abs)) {
+      throw new AppError('Archivo no encontrado', 404);
+    }
+
+    const nombreArchivo = doc.nombre || path.basename(doc.rutaRelativa);
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+    entregarArchivoLocal(req, res, next, {
+      abs,
+      nombreArchivo,
+      clienteOid,
+      origen: 'acceso_publico',
+      detalle: { publicId, rutaInternaCliente: doc.rutaRelativa },
+    });
+  } catch (err) {
     next(err);
   }
 }
@@ -271,4 +344,5 @@ module.exports = {
   solicitarUrlFirma,
   explorar,
   accesoLocalPorToken,
+  accesoPublicoPorPublicId,
 };
