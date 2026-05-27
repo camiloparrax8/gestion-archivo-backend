@@ -225,8 +225,9 @@ async function accesoLocalPorToken(req, res, next) {
     const clienteOid = mongoose.Types.ObjectId.isValid(payload.cid)
       ? new mongoose.Types.ObjectId(payload.cid)
       : undefined;
+    const nombreArchivo = path.basename(String(payload.rel));
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.sendFile(path.resolve(abs), (err) => {
+    res.download(path.resolve(abs), nombreArchivo, (err) => {
       if (err) return next(err);
       void auditoriaService.registrar({
         clienteId: clienteOid,
