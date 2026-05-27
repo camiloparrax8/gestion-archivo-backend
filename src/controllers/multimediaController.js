@@ -59,6 +59,11 @@ function parsearRutaInternaCliente(ruta) {
   return { contexto, entidad, id, tipo, nombreArchivo, carpeta: `${contexto}/${entidad}/${id}/${tipo}` };
 }
 
+function esArchivoExcel(nombreArchivo) {
+  const ext = path.extname(String(nombreArchivo || '')).toLowerCase();
+  return ext === '.xls' || ext === '.xlsx' || ext === '.xlsm';
+}
+
 async function listar(req, res) {
   const { contexto, entidad, id, tipo } = req.params;
   const cid = clienteIdParaRutas(req);
@@ -226,8 +231,9 @@ async function accesoLocalPorToken(req, res, next) {
       ? new mongoose.Types.ObjectId(payload.cid)
       : undefined;
     const nombreArchivo = path.basename(String(payload.rel));
+    const esExcel = esArchivoExcel(nombreArchivo);
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.download(path.resolve(abs), nombreArchivo, (err) => {
+    const terminarRespuesta = (err) => {
       if (err) return next(err);
       void auditoriaService.registrar({
         clienteId: clienteOid,
@@ -238,7 +244,12 @@ async function accesoLocalPorToken(req, res, next) {
         origen: 'acceso_token',
         detalle: { rutaInternaCliente: payload.rel },
       });
-    });
+    };
+    if (esExcel) {
+      res.download(path.resolve(abs), nombreArchivo, terminarRespuesta);
+    } else {
+      res.sendFile(path.resolve(abs), terminarRespuesta);
+    }
   } catch (err) {
     if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
       return next(new AppError('Enlace inválido o expirado', 401));
