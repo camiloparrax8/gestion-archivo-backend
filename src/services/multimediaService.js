@@ -514,6 +514,9 @@ async function procesarSubida(req) {
       if (metaDoc?.publicId) {
         data.publicId = metaDoc.publicId;
       }
+      if (vis === 'publico' && metaDoc?.publicId) {
+        data.rutaPublica = construirRutaPublicaPorPublicId(metaDoc.publicId);
+      }
       if (vis === 'privado') {
         data.url = await s3
           .urlFirmaLectura(s3.claveCompleta(data.rutaRelativa), config.signedUrlExpiresSeconds)
@@ -566,6 +569,9 @@ async function procesarSubida(req) {
     if (metaDoc?.publicId) {
       data.publicId = metaDoc.publicId;
     }
+    if (vis === 'publico' && metaDoc?.publicId) {
+      data.rutaPublica = construirRutaPublicaPorPublicId(metaDoc.publicId);
+    }
   }
   return data;
 }
@@ -592,10 +598,17 @@ function baseUrlPeticion(req) {
   return `${req.protocol}://${req.get('host')}`;
 }
 
-/** URL estable de lectura para archivos con visibilidad pública (Mongo + local). */
-function construirUrlPublicaPorPublicId(req, publicId) {
+const RUTA_PUBLICA_MULTIMEDIA_PREFIX = '/api/v1/multimedia/publico';
+
+/** Ruta relativa estable (sin host) para concatenar con PUBLIC_BASE_URL en integraciones. */
+function construirRutaPublicaPorPublicId(publicId) {
   const id = encodeURIComponent(String(publicId || '').trim());
-  return `${baseUrlPeticion(req)}/api/v1/multimedia/publico/${id}`;
+  return `${RUTA_PUBLICA_MULTIMEDIA_PREFIX}/${id}`;
+}
+
+/** URL absoluta de lectura para archivos con visibilidad pública (Mongo + local). */
+function construirUrlPublicaPorPublicId(req, publicId) {
+  return `${baseUrlPeticion(req)}${construirRutaPublicaPorPublicId(publicId)}`;
 }
 
 /**
@@ -680,6 +693,9 @@ async function enriquecerListadoConUrls(req, items, clienteId) {
       modificadoEn: item.modificadoEn,
       visibilidad: usaMongoAuth() && clienteId ? vis : undefined,
       ...(meta?.publicId ? { publicId: meta.publicId } : {}),
+      ...(vis === 'publico' && meta?.publicId
+        ? { rutaPublica: construirRutaPublicaPorPublicId(meta.publicId) }
+        : {}),
       url: urlFinal,
       accesoPrivado,
       apiKeyId: meta?.apiKeyId || item.apiKeyId || null,
@@ -967,6 +983,8 @@ async function enriquecerExploracion(req, exploracion, clienteId) {
     modificadoEn: f.modificadoEn,
     visibilidad: f.visibilidad,
     accesoPrivado: f.accesoPrivado,
+    ...(f.publicId ? { publicId: f.publicId } : {}),
+    ...(f.rutaPublica ? { rutaPublica: f.rutaPublica } : {}),
     apiKeyId: f.apiKeyId || null,
   }));
 
@@ -1081,6 +1099,7 @@ module.exports = {
   existeArchivoEnAlmacenamiento,
   baseUrlPeticion,
   construirUrlPublicaPorPublicId,
+  construirRutaPublicaPorPublicId,
   explorar,
   enriquecerExploracion,
   contextoDesdePrefijo,

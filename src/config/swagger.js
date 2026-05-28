@@ -130,6 +130,16 @@ const options = {
             tamaño: { type: 'integer' },
             modificadoEn: { type: 'string', format: 'date-time' },
             visibilidad: { type: 'string', enum: ['publico', 'privado'] },
+            publicId: {
+              type: 'string',
+              format: 'uuid',
+              description: 'Identificador estable del archivo público en MongoDB',
+            },
+            rutaPublica: {
+              type: 'string',
+              description:
+                'Ruta relativa sin host (ej. /api/v1/multimedia/publico/{publicId}) para concatenar con PUBLIC_BASE_URL',
+            },
             url: { type: 'string', format: 'uri', nullable: true },
             accesoPrivado: { type: 'boolean' },
           },
@@ -167,6 +177,11 @@ const options = {
             tamaño: { type: 'integer' },
             modificadoEn: { type: 'string', format: 'date-time' },
             visibilidad: { type: 'string', enum: ['publico', 'privado'] },
+            publicId: { type: 'string', format: 'uuid' },
+            rutaPublica: {
+              type: 'string',
+              description: 'Ruta relativa /api/v1/multimedia/publico/{publicId} (solo si visibilidad=publico)',
+            },
             accesoPrivado: { type: 'boolean' },
           },
         },
