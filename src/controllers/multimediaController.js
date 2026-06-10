@@ -3,6 +3,7 @@ const fs = require('fs');
 const mongoose = require('mongoose');
 const multimediaService = require('../services/multimediaService');
 const archivoMetadataService = require('../services/archivoMetadataService');
+const imageVariantsService = require('../services/imageVariantsService');
 const auditoriaService = require('../services/auditoria/auditoriaService');
 const AppError = require('../utils/AppError');
 const config = require('../config');
@@ -72,10 +73,23 @@ function esArchivoWord(nombreArchivo) {
 const PUBLIC_ID_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function inferirContentType(nombreArchivo) {
+  const ext = path.extname(String(nombreArchivo || '')).toLowerCase();
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.gif') return 'image/gif';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  return undefined;
+}
+
 function entregarArchivoLocal(req, res, next, opciones) {
-  const { abs, nombreArchivo, clienteOid, origen, detalle } = opciones;
+  const { abs, nombreArchivo, clienteOid, origen, detalle, contentType } = opciones;
   const forzarDescarga = esArchivoExcel(nombreArchivo) || esArchivoWord(nombreArchivo);
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  const tipo = contentType || inferirContentType(nombreArchivo);
+  if (tipo && !forzarDescarga) {
+    res.setHeader('Content-Type', tipo);
+  }
   const terminarRespuesta = (err) => {
     if (err) return next(err);
     void auditoriaService.registrar({
@@ -293,10 +307,13 @@ async function accesoPublicoPorPublicId(req, res, next) {
     }
 
     const clienteId = String(doc.cliente);
-    const existe = await multimediaService.existeArchivoEnAlmacenamiento(
+    const rutaEntrega = await imageVariantsService.resolverRutaEntrega(
       clienteId,
       doc.rutaRelativa,
+      req.query.size,
     );
+
+    const existe = await multimediaService.existeArchivoEnAlmacenamiento(clienteId, rutaEntrega);
     if (!existe) {
       throw new AppError('Archivo no encontrado', 404);
     }
@@ -305,31 +322,40 @@ async function accesoPublicoPorPublicId(req, res, next) {
       ? new mongoose.Types.ObjectId(clienteId)
       : undefined;
 
+    const sizeSolicitado = imageVariantsService.normalizarSizeQuery(req.query.size);
+    const esVariante = imageVariantsService.esRutaVariante(rutaEntrega);
+
     if (multimediaService.esAlmacenamientoS3()) {
       const relStorage = multimediaService.resolverRutaAlmacenamientoDesdeInterna(
         clienteId,
-        doc.rutaRelativa,
+        rutaEntrega,
       );
       const url = multimediaService.construirUrlPublicaMedia(req, relStorage);
       res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
       return res.redirect(302, url);
     }
 
-    const rel = multimediaService.conPrefijoCliente(clienteId, doc.rutaRelativa);
+    const rel = multimediaService.conPrefijoCliente(clienteId, rutaEntrega);
     const abs = path.join(path.resolve(config.storageDir), ...rel.split('/'));
     multimediaService.asegurarDentroDeUploads(abs);
     if (!fs.existsSync(abs)) {
       throw new AppError('Archivo no encontrado', 404);
     }
 
-    const nombreArchivo = doc.nombre || path.basename(doc.rutaRelativa);
+    const nombreArchivo = path.basename(rutaEntrega);
     res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
     entregarArchivoLocal(req, res, next, {
       abs,
       nombreArchivo,
       clienteOid,
       origen: 'acceso_publico',
-      detalle: { publicId, rutaInternaCliente: doc.rutaRelativa },
+      contentType: esVariante ? imageVariantsService.VARIANT_MIME : undefined,
+      detalle: {
+        publicId,
+        rutaInternaCliente: doc.rutaRelativa,
+        rutaEntrega,
+        size: sizeSolicitado || undefined,
+      },
     });
   } catch (err) {
     next(err);
