@@ -21,6 +21,13 @@ const router = express.Router();
  *         name: publicId
  *         required: true
  *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: size
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [thumb, medium]
+ *         description: Variante optimizada WebP (fallback al original si no existe)
  *     responses:
  *       200: { description: Stream del archivo }
  *       302: { description: Redirección a URL pública S3 }

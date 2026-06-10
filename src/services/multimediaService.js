@@ -10,6 +10,7 @@ const {
 const AppError = require('../utils/AppError');
 const s3 = require('./multimediaS3Storage');
 const archivoMetadataService = require('./archivoMetadataService');
+const imageVariantsService = require('./imageVariantsService');
 const { itemVisibleEnPrefijos } = require('../middleware/validarAlcanceMultimedia');
 
 const storageRaiz = () => path.resolve(config.storageDir);
@@ -345,6 +346,7 @@ async function eliminarArchivoLocal(clienteId, contexto, entidad, id, tipo, nomb
     const interna = sub
       ? rutaInternaCliente(contexto, entidad, id, tipo, nombreSeguro, sub)
       : rutaInternaCliente(contexto, entidad, id, tipo, nombreSeguro);
+    await imageVariantsService.eliminarVariantes(clienteId, interna).catch(() => []);
     return { eliminado: true, nombre: nombreSeguro, rutaInternaCliente: interna };
   }
 
@@ -373,6 +375,7 @@ async function eliminarArchivoS3(clienteId, contexto, entidad, id, tipo, nombreA
     if (!existe) continue;
     await s3.eliminarObjeto(clave);
     const interna = rutaInternaDesdeAlmacenamiento(clienteId, rutaRelativa);
+    await imageVariantsService.eliminarVariantes(clienteId, interna).catch(() => []);
     return { eliminado: true, nombre: nombreSeguro, rutaInternaCliente: interna };
   }
 
@@ -490,6 +493,20 @@ async function subirArchivoS3(req, file, clienteId) {
   };
 }
 
+async function generarVariantesTrasSubida(req, file, clienteId, data) {
+  try {
+    await imageVariantsService.generarYPersistirDesdeSubida({
+      clienteId,
+      rutaInternaCliente: data.rutaInternaCliente,
+      mime: data.mime,
+      buffer: esAlmacenamientoS3() ? file.buffer : null,
+      localPath: esAlmacenamientoS3() ? null : file.path,
+    });
+  } catch (err) {
+    console.error('[multimedia] No se pudieron generar variantes de imagen:', err.message);
+  }
+}
+
 async function procesarSubida(req) {
   const file = req.file;
   const clienteId = usaMongoAuth() && !req.auth?.legacy ? String(req.auth.cliente._id) : null;
@@ -523,6 +540,7 @@ async function procesarSubida(req) {
           .catch(() => data.url);
       }
     }
+    await generarVariantesTrasSubida(req, file, clienteId, data);
     return data;
   }
 
@@ -573,6 +591,7 @@ async function procesarSubida(req) {
       data.rutaPublica = construirRutaPublicaPorPublicId(metaDoc.publicId);
     }
   }
+  await generarVariantesTrasSubida(req, file, clienteId, data);
   return data;
 }
 
