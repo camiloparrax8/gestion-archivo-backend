@@ -171,6 +171,20 @@ async function existeObjeto(clave) {
   }
 }
 
+async function leerObjetoBuffer(clave) {
+  const out = await getClient().send(
+    new GetObjectCommand({
+      Bucket: config.s3.bucket,
+      Key: clave,
+    }),
+  );
+  const chunks = [];
+  for await (const chunk of out.Body) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 module.exports = {
   claveCompleta,
   prefijoListado,
@@ -182,5 +196,6 @@ module.exports = {
   listarNivel,
   eliminarObjeto,
   existeObjeto,
+  leerObjetoBuffer,
   normalizarPrefijo,
 };
