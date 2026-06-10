@@ -10,8 +10,11 @@ const {
 const AppError = require('../utils/AppError');
 const s3 = require('./multimediaS3Storage');
 const archivoMetadataService = require('./archivoMetadataService');
-const imageVariantsService = require('./imageVariantsService');
 const { itemVisibleEnPrefijos } = require('../middleware/validarAlcanceMultimedia');
+
+function getImageVariantsService() {
+  return require('./imageVariantsService');
+}
 
 const storageRaiz = () => path.resolve(config.storageDir);
 
@@ -346,7 +349,7 @@ async function eliminarArchivoLocal(clienteId, contexto, entidad, id, tipo, nomb
     const interna = sub
       ? rutaInternaCliente(contexto, entidad, id, tipo, nombreSeguro, sub)
       : rutaInternaCliente(contexto, entidad, id, tipo, nombreSeguro);
-    await imageVariantsService.eliminarVariantes(clienteId, interna).catch(() => []);
+    await getImageVariantsService().eliminarVariantes(clienteId, interna).catch(() => []);
     return { eliminado: true, nombre: nombreSeguro, rutaInternaCliente: interna };
   }
 
@@ -375,7 +378,7 @@ async function eliminarArchivoS3(clienteId, contexto, entidad, id, tipo, nombreA
     if (!existe) continue;
     await s3.eliminarObjeto(clave);
     const interna = rutaInternaDesdeAlmacenamiento(clienteId, rutaRelativa);
-    await imageVariantsService.eliminarVariantes(clienteId, interna).catch(() => []);
+    await getImageVariantsService().eliminarVariantes(clienteId, interna).catch(() => []);
     return { eliminado: true, nombre: nombreSeguro, rutaInternaCliente: interna };
   }
 
@@ -495,7 +498,7 @@ async function subirArchivoS3(req, file, clienteId) {
 
 async function generarVariantesTrasSubida(req, file, clienteId, data) {
   try {
-    await imageVariantsService.generarYPersistirDesdeSubida({
+    await getImageVariantsService().generarYPersistirDesdeSubida({
       clienteId,
       rutaInternaCliente: data.rutaInternaCliente,
       mime: data.mime,

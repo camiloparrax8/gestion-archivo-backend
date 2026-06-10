@@ -1,8 +1,12 @@
 const fs = require('fs/promises');
 const path = require('path');
-const multimediaService = require('./multimediaService');
 const imageProcessingService = require('./imageProcessingService');
 const s3 = require('./multimediaS3Storage');
+
+// Lazy require evita dependencia circular con multimediaService.js
+function getMultimediaService() {
+  return require('./multimediaService');
+}
 
 const VALID_SIZES = new Set(['thumb', 'medium']);
 const VARIANT_MIME = 'image/webp';
@@ -54,11 +58,13 @@ async function resolverRutaEntrega(clienteId, rutaInternaOriginal, sizeQuery) {
   if (!rutaVariante) {
     return rutaInternaOriginal;
   }
+  const multimediaService = getMultimediaService();
   const existe = await multimediaService.existeArchivoEnAlmacenamiento(clienteId, rutaVariante);
   return existe ? rutaVariante : rutaInternaOriginal;
 }
 
 function absDesdeRutaInterna(clienteId, rutaInterna) {
+  const multimediaService = getMultimediaService();
   const rel = multimediaService.resolverRutaAlmacenamientoDesdeInterna(clienteId, rutaInterna);
   const base = path.resolve(require('../config').storageDir);
   return path.join(base, ...rel.split('/'));
@@ -72,6 +78,7 @@ async function leerOriginalComoBuffer(opciones) {
   if (localPath) {
     return fs.readFile(localPath);
   }
+  const multimediaService = getMultimediaService();
   if (multimediaService.esAlmacenamientoS3()) {
     return s3.leerObjetoBuffer(
       s3.claveCompleta(
@@ -85,6 +92,7 @@ async function leerOriginalComoBuffer(opciones) {
 }
 
 async function persistirVariante(clienteId, rutaInternaVariante, webpBuffer) {
+  const multimediaService = getMultimediaService();
   if (multimediaService.esAlmacenamientoS3()) {
     const clave = s3.claveCompleta(
       multimediaService.resolverRutaAlmacenamientoDesdeInterna(clienteId, rutaInternaVariante),
@@ -132,6 +140,7 @@ async function generarYPersistirSiFaltan(clienteId, rutaInternaCliente, mime) {
   if (!imageProcessingService.esMimeImagenOptimizable(mime)) {
     return { omitido: true, motivo: 'no_imagen' };
   }
+  const multimediaService = getMultimediaService();
   const faltantes = [];
   for (const size of VALID_SIZES) {
     const rutaVariante = rutaVarianteInterna(rutaInternaCliente, size);
@@ -160,6 +169,7 @@ async function generarYPersistirSiFaltan(clienteId, rutaInternaCliente, mime) {
  * Elimina variantes asociadas a un archivo original.
  */
 async function eliminarVariantes(clienteId, rutaInternaOriginal) {
+  const multimediaService = getMultimediaService();
   const eliminadas = [];
   for (const size of VALID_SIZES) {
     const rutaVariante = rutaVarianteInterna(rutaInternaOriginal, size);
