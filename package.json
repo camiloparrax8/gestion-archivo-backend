@@ -9,7 +9,8 @@
     "dev": "nodemon src/server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "migrate:admin": "node src/scripts/migrateSeedAdminUser.js",
-    "postman": "node scripts/postman/generate-collection.js"
+    "postman": "node scripts/postman/generate-collection.js",
+    "variants:backfill": "node scripts/generate-image-variants.js --limit=100"
   },
   "keywords": [],
   "author": "",
@@ -27,6 +28,7 @@
     "mongoose": "^9.4.1",
     "morgan": "^1.10.1",
     "multer": "^2.1.1",
+    "sharp": "^0.34.5",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
   },
