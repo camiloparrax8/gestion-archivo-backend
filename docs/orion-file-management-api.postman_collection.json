@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Orion Marketplace File Management API",
-    "description": "API de gestión de archivos/multimedia, clientes y llaves API.",
+    "name": "Guven File API",
+    "description": "API de gestión de archivos: integraciones con API Key (X-API-Key) y panel web con JWT (Bearer). Misma estructura de rutas lógicas contexto/entidad/id/tipo.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -39,6 +39,12 @@
       "key": "master_api_key",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "llave_id",
+      "value": "",
+      "type": "string",
+      "description": "publicId de API key (opcional, panel JWT)"
     }
   ],
   "item": [
@@ -65,11 +71,12 @@
                 {
                   "key": "q",
                   "value": "",
-                  "description": "Búsqueda por email/nombre"
+                  "description": "Búsqueda por email, nombre, teléfono, tipo o número de documento"
                 },
                 {
                   "key": "activo",
-                  "value": ""
+                  "value": "",
+                  "description": "Filtrar por activo (true/false)"
                 }
               ]
             },
@@ -109,7 +116,81 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"example\",\n  \"nombre\": \"example\"\n}",
+              "raw": "{\n  \"email\": \"example\",\n  \"nombre\": \"example\",\n  \"telefono\": \"example\",\n  \"phone\": \"example\",\n  \"estado\": true,\n  \"activo\": true,\n  \"tipoDocumento\": \"example\",\n  \"documentType\": \"example\",\n  \"numeroDocumento\": \"example\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Obtener un cliente por ObjectId o publicId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/clientes/:clienteId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "clientes",
+                ":clienteId"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Actualizar cliente (parcial)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/clientes/:clienteId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "clientes",
+                ":clienteId"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"example\",\n  \"nombre\": \"example\",\n  \"telefono\": \"example\",\n  \"phone\": \"example\",\n  \"tipoDocumento\": \"example\",\n  \"documentType\": \"example\",\n  \"numeroDocumento\": \"example\",\n  \"estado\": true,\n  \"activo\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -191,6 +272,38 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Eliminar una API key del cliente",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/clientes/:clienteId/llaves/:llaveId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "clientes",
+                ":clienteId",
+                "llaves",
+                ":llaveId"
+              ]
             },
             "auth": {
               "type": "bearer",
@@ -507,6 +620,37 @@
           }
         },
         {
+          "name": "Eliminar una de mis llaves API",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/client/me/apikeys/:llaveId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "client",
+                "me",
+                "apikeys",
+                ":llaveId"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
           "name": "Activar/desactivar una de mis llaves",
           "request": {
             "method": "PATCH",
@@ -656,9 +800,10 @@
                 "url-firma"
               ]
             },
+            "description": "Integraciones con API Key. Body con rutaInternaCliente (5 o 6 segmentos).\nEl cliente en MongoDB se resuelve desde la API key; no envíe clienteId.\n",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"contexto\": \"example\",\n  \"entidad\": \"example\",\n  \"id\": \"example\",\n  \"tipo\": \"example\",\n  \"archivo\": \"example\"\n}",
+              "raw": "{\n  \"rutaInternaCliente\": \"orion/productos/674a1b2c3d4e5f678901234/galeria/jpeg/1678900000-abc.jpg\",\n  \"segundos\": 900\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -719,6 +864,7 @@
                 ":tipo"
               ]
             },
+            "description": "Campo multipart obligatorio **archivo**. El segmento {id} es el ID del recurso\nen el sistema que integra (productId, userId, etc.), no el id del cliente en MongoDB.\n",
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -756,6 +902,458 @@
                 ":id",
                 ":tipo",
                 ":archivo"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "MultimediaPanel",
+      "item": [
+        {
+          "name": "Solicitar URL de lectura (panel JWT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Llave-Id",
+                "value": "{{llave_id}}",
+                "description": "Opcional en panel JWT: publicId de una API key para filtrar browse y aplicar prefijos. No obligatorio para subir."
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/client/me/multimedia/url-firma",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "client",
+                "me",
+                "multimedia",
+                "url-firma"
+              ]
+            },
+            "description": "Igual que POST /v1/multimedia/url-firma pero con sesión del gestor.\nNo requiere API key; el tenant se deduce del JWT.\nOpcional X-Llave-Id para validar alcance si se envía una llave.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rutaInternaCliente\": \"orion/productos/674a1b2c3d4e5f678901234/galeria/jpeg/1678900000-abc.jpg\",\n  \"segundos\": 900\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Explorar carpetas y archivos (panel JWT)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Llave-Id",
+                "value": "{{llave_id}}",
+                "description": "Opcional en panel JWT: publicId de una API key para filtrar browse y aplicar prefijos. No obligatorio para subir."
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/client/me/multimedia/browse?prefix=orion/productos&llaveId={{llave_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "client",
+                "me",
+                "multimedia",
+                "browse"
+              ],
+              "query": [
+                {
+                  "key": "prefix",
+                  "value": "orion/productos",
+                  "description": "Prefijo lógico de carpeta (ej. orion/productos)"
+                },
+                {
+                  "key": "llaveId",
+                  "value": "{{llave_id}}",
+                  "description": "Alias de X-Llave-Id (publicId de la llave)"
+                }
+              ]
+            },
+            "description": "Explorador tipo storage browser. No requiere API key.\nQuery opcional prefix y llaveId (header X-Llave-Id o query llaveId) para filtrar por prefijos de una llave.\n",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar archivos en carpeta (panel JWT)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Llave-Id",
+                "value": "{{llave_id}}",
+                "description": "Opcional en panel JWT: publicId de una API key para filtrar browse y aplicar prefijos. No obligatorio para subir."
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/client/me/multimedia/:contexto/:entidad/:id/:tipo",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "client",
+                "me",
+                "multimedia",
+                ":contexto",
+                ":entidad",
+                ":id",
+                ":tipo"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Subir archivo (panel JWT, sin API key obligatoria)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Llave-Id",
+                "value": "{{llave_id}}",
+                "description": "Opcional en panel JWT: publicId de una API key para filtrar browse y aplicar prefijos. No obligatorio para subir."
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/client/me/multimedia/:contexto/:entidad/:id/:tipo",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "client",
+                "me",
+                "multimedia",
+                ":contexto",
+                ":entidad",
+                ":id",
+                ":tipo"
+              ]
+            },
+            "description": "El cliente del JWT queda implícito; no envíe clienteId en la URL.\nEl segmento {id} es el ID del recurso en su aplicación (producto, usuario, etc.).\n",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "description": "Selecciona un archivo en Postman (campo esperado por el servidor).",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Eliminar archivo (panel JWT)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Llave-Id",
+                "value": "{{llave_id}}",
+                "description": "Opcional en panel JWT: publicId de una API key para filtrar browse y aplicar prefijos. No obligatorio para subir."
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/client/me/multimedia/:contexto/:entidad/:id/:tipo/:archivo",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "client",
+                "me",
+                "multimedia",
+                ":contexto",
+                ":entidad",
+                ":id",
+                ":tipo",
+                ":archivo"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "URL de lectura para un cliente (admin JWT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Llave-Id",
+                "value": "{{llave_id}}",
+                "description": "Opcional en panel JWT: publicId de una API key para filtrar browse y aplicar prefijos. No obligatorio para subir."
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/clientes/:clienteId/multimedia/url-firma",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "clientes",
+                ":clienteId",
+                "multimedia",
+                "url-firma"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rutaInternaCliente\": \"orion/productos/674a1b2c3d4e5f678901234/galeria/jpeg/1678900000-abc.jpg\",\n  \"segundos\": 900\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Explorar almacenamiento de un cliente (admin JWT)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Llave-Id",
+                "value": "{{llave_id}}",
+                "description": "Opcional en panel JWT: publicId de una API key para filtrar browse y aplicar prefijos. No obligatorio para subir."
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/clientes/:clienteId/multimedia/browse?prefix=orion/productos",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "clientes",
+                ":clienteId",
+                "multimedia",
+                "browse"
+              ],
+              "query": [
+                {
+                  "key": "prefix",
+                  "value": "orion/productos",
+                  "description": "Prefijo lógico de carpeta (ej. orion/productos)"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar carpeta de un cliente (admin JWT)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/clientes/:clienteId/multimedia/:contexto/:entidad/:id/:tipo",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "clientes",
+                ":clienteId",
+                "multimedia",
+                ":contexto",
+                ":entidad",
+                ":id",
+                ":tipo"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Subir archivo en nombre de un cliente (admin JWT)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/clientes/:clienteId/multimedia/:contexto/:entidad/:id/:tipo",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "clientes",
+                ":clienteId",
+                "multimedia",
+                ":contexto",
+                ":entidad",
+                ":id",
+                ":tipo"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "description": "Selecciona un archivo en Postman (campo esperado por el servidor).",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Eliminar archivo de un cliente (admin JWT)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/clientes/:clienteId/multimedia/:contexto/:entidad/:id/:tipo/:archivo",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "clientes",
+                ":clienteId",
+                "multimedia",
+                ":contexto",
+                ":entidad",
+                ":id",
+                ":tipo",
+                ":archivo"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
               ]
             }
           }
