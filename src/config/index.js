@@ -24,10 +24,37 @@ function resolveStorageDir() {
 
 const storageDirResolved = resolveStorageDir();
 
+function parseListEnv(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((s) => s.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+}
+
+/** Orígenes locales habituales (Vite, CRA) cuando CORS_ORIGINS no está definido en dev. */
+const defaultDevCorsOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+];
+
+const corsOriginsFromEnv = parseListEnv(process.env.CORS_ORIGINS);
+const isProduction = process.env.NODE_ENV === 'production';
+const corsOrigins = corsOriginsFromEnv.length
+  ? corsOriginsFromEnv
+  : isProduction
+    ? []
+    : defaultDevCorsOrigins;
+
 module.exports = {
   port: Number(process.env.PORT) || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
-  isProduction: process.env.NODE_ENV === 'production',
+  isProduction,
+  /** Orígenes permitidos para peticiones cross-origin del navegador (CORS_ORIGINS). */
+  corsOrigins,
   /** `local` = disco (`storage/` por defecto). `s3` = Amazon S3. */
   storageDriver,
   /**

@@ -5,6 +5,7 @@ const morgan = require('morgan');
 const swaggerUi = require('swagger-ui-express');
 
 const config = require('./config');
+const { buildCorsOptions } = require('./config/cors');
 const { swaggerSpec } = require('./config/swagger');
 const routes = require('./routes');
 const healthController = require('./controllers/healthController');
@@ -24,7 +25,7 @@ const app = express();
  *       200: { description: OK }
  */
 app.use(helmet());
-app.use(cors());
+app.use(cors(buildCorsOptions()));
 app.use(morgan(config.isProduction ? 'combined' : 'dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

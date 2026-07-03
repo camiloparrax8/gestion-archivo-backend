@@ -23,6 +23,13 @@ async function ensureServerReady() {
   }
 
   initPromise = (async () => {
+    if (config.isProduction && config.corsOrigins.length === 0) {
+      throw new AppError(
+        'En producción defina CORS_ORIGINS con los dominios del frontend (separados por coma).',
+        503,
+      );
+    }
+
     if (isVercel() && config.storageDriver !== 's3') {
       console.warn(
         '[orion] Vercel + STORAGE_DRIVER=local: los archivos se guardan en',
