@@ -236,7 +236,7 @@ const options = {
           required: true,
           schema: {
             type: 'string',
-            enum: ['perfil', 'logo', 'galeria', 'documentos', 'marca', 'otros'],
+            enum: ['perfil', 'logo', 'galeria', 'documentos', 'marca', 'banners', 'otros'],
           },
         },
         MultimediaArchivoNombre: {

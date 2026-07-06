@@ -12,6 +12,7 @@ const TIPOS_CARPETA_PERMITIDOS = new Set([
   'galeria',
   'documentos',
   'marca',
+  'banners',
   'otros',
 ]);
 
