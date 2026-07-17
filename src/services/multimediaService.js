@@ -1034,6 +1034,8 @@ const MIME_POR_SUBCARPETA = {
   png: 'image/png',
   gif: 'image/gif',
   webp: 'image/webp',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
 };
 
 function inferirMimeDesdeRuta(rutaInternaCliente, subcarpeta) {
@@ -1054,6 +1056,8 @@ function inferirMimeDesdeRuta(rutaInternaCliente, subcarpeta) {
     png: 'image/png',
     gif: 'image/gif',
     webp: 'image/webp',
+    mp4: 'video/mp4',
+    webm: 'video/webm',
   };
   return porExt[ext] || null;
 }

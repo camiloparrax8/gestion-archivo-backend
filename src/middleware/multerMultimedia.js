@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const config = require('../config');
-const { MIME_PERMITIDOS, CAMPO_ARCHIVO, subcarpetaPorMime } = require('../config/multimedia');
+const { CAMPO_ARCHIVO, subcarpetaPorMime, normalizarMime, esMimePermitido } = require('../config/multimedia');
 const AppError = require('../utils/AppError');
 const multimediaService = require('../services/multimediaService');
 const { generarNombreArchivoMultimedia } = require('../utils/generarNombreArchivoMultimedia');
@@ -44,9 +44,11 @@ function crearUpload() {
     storage,
     limits: { fileSize: config.uploadMaxBytes },
     fileFilter(req, file, cb) {
-      if (!MIME_PERMITIDOS.has(file.mimetype)) {
+      const mime = normalizarMime(file.mimetype);
+      if (!esMimePermitido(mime)) {
         return cb(new AppError(`Tipo de archivo no permitido: ${file.mimetype}`, 400));
       }
+      file.mimetype = mime;
       cb(null, true);
     },
   });

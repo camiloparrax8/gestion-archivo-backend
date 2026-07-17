@@ -29,6 +29,8 @@ const MIME_PERMITIDOS = new Set([
   'application/vnd.ms-excel.sheet.macroEnabled.12',
   'application/vnd.oasis.opendocument.text',
   'application/vnd.oasis.opendocument.spreadsheet',
+  'video/mp4',
+  'video/webm',
 ]);
 
 /** Subcarpeta física bajo `{tipo}/` según MIME. */
@@ -45,16 +47,47 @@ const MIME_A_SUBCARPETA = new Map([
   ['application/vnd.ms-excel.sheet.macroEnabled.12', 'xlsm'],
   ['application/vnd.oasis.opendocument.text', 'odt'],
   ['application/vnd.oasis.opendocument.spreadsheet', 'ods'],
+  ['video/mp4', 'mp4'],
+  ['video/webm', 'webm'],
 ]);
 
 const SUBCARPETAS_TIPO_ARCHIVO = new Set(MIME_A_SUBCARPETA.values());
+
+/** Alias habituales de clientes HTTP → MIME canónico del servicio. */
+const MIME_ALIASES = new Map([
+  ['video/x-mp4', 'video/mp4'],
+  ['application/mp4', 'video/mp4'],
+]);
+
+/**
+ * @param {string | undefined | null} mimetype
+ * @returns {string}
+ */
+function normalizarMime(mimetype) {
+  const base = String(mimetype || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  if (!base) {
+    return '';
+  }
+  return MIME_ALIASES.get(base) || base;
+}
+
+/**
+ * @param {string | undefined | null} mimetype
+ * @returns {boolean}
+ */
+function esMimePermitido(mimetype) {
+  return MIME_PERMITIDOS.has(normalizarMime(mimetype));
+}
 
 /**
  * @param {string} mimetype
  * @returns {string}
  */
 function subcarpetaPorMime(mimetype) {
-  const s = MIME_A_SUBCARPETA.get(mimetype);
+  const s = MIME_A_SUBCARPETA.get(normalizarMime(mimetype));
   if (!s) {
     throw new Error(`MIME sin subcarpeta definida: ${mimetype}`);
   }
@@ -68,6 +101,8 @@ module.exports = {
   MIME_PERMITIDOS,
   MIME_A_SUBCARPETA,
   SUBCARPETAS_TIPO_ARCHIVO,
+  normalizarMime,
+  esMimePermitido,
   subcarpetaPorMime,
   CAMPO_ARCHIVO,
   SEGMENTO_SLUG_RE,

@@ -170,7 +170,8 @@ Si la API key tiene `prefijos` no vacíos, la ruta `contexto/entidad/id/tipo` de
 - **Body:** `multipart/form-data`
   - Campo archivo: **`archivo`** (nombre fijo en el código).
   - Opcional: **`visibilidad`** = `publico` (si no, suele tratarse como privado en metadata).
-- **Tipos MIME permitidos:** jpeg, png, gif, webp, pdf (ver `src/config/multimedia.js`).
+- **Tipos MIME permitidos:** jpeg, png, gif, webp, pdf, mp4, webm (ver `src/config/multimedia.js`).
+- **Ejemplo reseñas Orion:** `POST .../guven/product_reviews/{reviewId}/galeria` (adjuntos imagen/video de reseñas).
 - **Respuesta:** `201`, datos del fichero incluyendo `rutaInternaCliente` para usar en `url-firma`.
 
 ---

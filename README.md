@@ -31,6 +31,7 @@ Copia `.env.example` a `.env` y completa los valores. Nombres en **inglés** (co
 |----------|-------------|---------|
 | `PORT` | Puerto HTTP del servidor | `3001` |
 | `NODE_ENV` | Entorno de ejecución | `development` / `production` |
+| `CORS_ORIGINS` | Orígenes del frontend permitidos (CORS). Obligatorio en producción | `http://localhost:5173,https://app.tudominio.com` |
 | `MONGODB_URI` | URI de MongoDB (multi-cliente, API keys, auditoría) | `mongodb://127.0.0.1:27017/orion_marketplace` |
 | `MASTER_API_KEY` | Cabecera `X-Master-Key` para bootstrap (`POST /api/v1/auth/register`) | *(cadena larga)* |
 | `JWT_AUTH_SECRET` | Secreto JWT de login de usuarios | *(cadena segura)* |
@@ -279,6 +280,30 @@ Los prefijos HTTP se montan en `src/routes/` y `src/app.js`. Tabla orientativa (
 | admin | `/api/v1/admin` | Clientes y API keys (**JWT rol `admin`**) |
 | client | `/api/v1/client` | Autoservicio del rol cliente (`Bearer`) |
 
+### Variantes de imagen (thumb / medium)
+
+Al subir imágenes (`image/jpeg`, `image/png`, `image/gif`, `image/webp`) con MongoDB activo, el servicio genera automáticamente:
+
+| Variante | Ancho máx. | Formato |
+|----------|------------|---------|
+| `thumb` | 400 px | WebP ~80 % |
+| `medium` | 1200 px | WebP ~85 % |
+
+Lectura pública optimizada (fallback al original si no existe variante):
+
+```http
+GET /api/v1/multimedia/publico/{publicId}?size=thumb
+GET /api/v1/multimedia/publico/{publicId}?size=medium
+```
+
+Backfill para imágenes existentes:
+
+```bash
+npm run variants:backfill
+# o con límite explícito:
+node scripts/generate-image-variants.js --limit=100
+```
+
 ### Multimedia — contrato resumido
 
 **Ruta lógica** (local y S3):
@@ -288,8 +313,8 @@ Los prefijos HTTP se montan en `src/routes/` y `src/app.js`. Tabla orientativa (
 | Parámetro | Valores |
 |-----------|---------|
 | `contexto` | Slug: minúsculas, `[a-z0-9_-]`, máx. 63. Con MongoDB, alcance por **prefijos** de la API key |
-| `entidad` | `usuarios`, `productos`, `pedidos`, `sellers` |
-| `id` | UUID si `usuarios` o `sellers`; numérico si `productos` o `pedidos` |
+| `entidad` | `usuarios`, `productos`, `pedidos`, `sellers`, `product_reviews`, … |
+| `id` | UUID si `usuarios`, `sellers` o `product_reviews`; numérico si `productos` o `pedidos` |
 | `tipo` | `perfil`, `logo`, `galeria`, `documentos`, `marca`, `otros` |
 
 | Método | Ruta | Descripción |

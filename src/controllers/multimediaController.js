@@ -31,7 +31,7 @@ function parsearRutaInternaCliente(ruta) {
   const segmentos = ruta.split('/').filter(Boolean);
   if (segmentos.length !== 5 && segmentos.length !== 6) {
     throw new AppError(
-      'La ruta debe ser contexto/entidad/identificador/tipo/nombreArchivo (5 segmentos, legado) o contexto/entidad/identificador/tipo/subcarpeta/nombreArchivo (6 segmentos; subcarpeta: pdf, jpeg, png, gif, webp)',
+      'La ruta debe ser contexto/entidad/identificador/tipo/nombreArchivo (5 segmentos, legado) o contexto/entidad/identificador/tipo/subcarpeta/nombreArchivo (6 segmentos; subcarpeta: pdf, jpeg, png, gif, webp, mp4, webm)',
       400,
     );
   }
@@ -46,7 +46,7 @@ function parsearRutaInternaCliente(ruta) {
     const subcarpeta = segmentos[4];
     if (!SUBCARPETAS_TIPO_ARCHIVO.has(subcarpeta)) {
       throw new AppError(
-        'En rutas de 6 segmentos, el quinto debe ser la subcarpeta por tipo de archivo (pdf, jpeg, png, gif, webp)',
+        'En rutas de 6 segmentos, el quinto debe ser la subcarpeta por tipo de archivo (pdf, jpeg, png, gif, webp, mp4, webm)',
         400,
       );
     }
@@ -79,6 +79,8 @@ function inferirContentType(nombreArchivo) {
   if (ext === '.png') return 'image/png';
   if (ext === '.gif') return 'image/gif';
   if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.mp4') return 'video/mp4';
+  if (ext === '.webm') return 'video/webm';
   return undefined;
 }
 
