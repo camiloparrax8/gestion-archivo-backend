@@ -15,6 +15,8 @@ function extensionDesdeMime(mime) {
     'application/vnd.ms-excel.sheet.macroEnabled.12': '.xlsm',
     'application/vnd.oasis.opendocument.text': '.odt',
     'application/vnd.oasis.opendocument.spreadsheet': '.ods',
+    'video/mp4': '.mp4',
+    'video/webm': '.webm',
   };
   return map[mime] || '';
 }
